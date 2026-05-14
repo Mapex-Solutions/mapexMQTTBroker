@@ -1,0 +1,17 @@
+# Build artifacts
+*.so
+*.h
+mapex-broker.so
+
+# Go
+/vendor/
+*.test
+*.out
+go.work
+go.work.sum
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

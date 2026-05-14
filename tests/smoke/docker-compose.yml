@@ -1,0 +1,191 @@
+# =============================================================================
+# Mapex MQTT Broker — E2E smoke test stack
+#
+# Self-contained docker-compose that brings up the dependencies the
+# broker plugin needs at runtime:
+#
+#   - NATS Core (no JetStream needed for the fanout subject)
+#   - MinIO + a one-shot init container that creates the
+#     `mapex-mqtt-auth` bucket the broker reads as L2
+#   - The broker image itself, configured to talk to the above
+#
+# This stack does NOT include the real Assets MS. The L2 read model is
+# seeded directly via `mc` so the cascade L1 → L2 can be exercised
+# independently. For full end-to-end (Assets MS writing on CRUD), use
+# the mapexOS deployment compose under deployment/docker-compose.
+#
+# CREDENTIAL POLICY: the MinIO root creds below are LOCAL-ONLY defaults
+# for testing. They never touch production. Override at the shell if
+# you want — `MINIO_ROOT_PASSWORD=xxx docker compose up`.
+#
+# Usage:
+#   cd tests/smoke
+#   docker compose up -d
+#   ./seed-asset.sh asset-aaa org-1 secret
+#   docker compose logs -f broker
+#   ./invalidate-asset.sh asset-aaa
+#
+# Cleanup:
+#   docker compose down -v
+# =============================================================================
+
+services:
+  # NATS Core — the broker plugin's FANOUT consumer subscribes here.
+  # Host ports default to high numbers to avoid clashing with the
+  # operator's running mapex-* stack. Override via env if needed.
+  nats:
+    image: nats:2.12-alpine
+    container_name: mapex-smoke-nats
+    # -m 8222 enables the HTTP monitoring endpoint used by the healthcheck.
+    command: ["-DV", "-m", "8222"]
+    ports:
+      - "${SMOKE_NATS_PORT:-14222}:4222"
+      - "${SMOKE_NATS_HTTP_PORT:-18222}:8222"
+    networks:
+      - smoke
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # MinIO — L2 store for the broker plugin's TieredAuthStore.
+  minio:
+    image: minio/minio:latest
+    container_name: mapex-smoke-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "${SMOKE_MINIO_API_PORT:-19000}:9000"
+      - "${SMOKE_MINIO_CONSOLE_PORT:-19001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mapex-smoke-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mapex-smoke-password-1234}
+    networks:
+      - smoke
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot init: creates the `mapex-mqtt-auth` bucket the broker reads.
+  minio-init:
+    image: minio/mc:latest
+    container_name: mapex-smoke-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - smoke
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mapex-smoke-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mapex-smoke-password-1234}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "=== Configuring mc alias ==="
+        mc alias set mapex http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}
+
+        echo "=== Creating bucket mapex-mqtt-auth ==="
+        mc mb mapex/mapex-mqtt-auth --ignore-existing
+        mc anonymous set none mapex/mapex-mqtt-auth
+
+        echo "=== Listing buckets ==="
+        mc ls mapex
+
+        echo "=== Smoke MinIO init complete ==="
+
+  # The image under test. The auth_url points at a non-existent host on
+  # purpose: we are exercising the L1/L2 cascade without a live Assets
+  # MS. L3 will fail gracefully and log the fail-closed decision.
+  broker:
+    image: ${BROKER_IMAGE:-mapexos/mapex-broker-mqtt:dev}
+    container_name: mapex-smoke-broker
+    depends_on:
+      nats:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "${SMOKE_BROKER_PORT:-11883}:1883"
+    environment:
+      INTERNAL_API_KEY: smoke-test-internal-api-key
+      NATS_URL: nats://nats:4222
+      ASSETS_HOST: assets-not-running
+      ASSETS_PORT: "5002"
+      CACHE_L1_PATH: /var/cache/mqtt
+      CACHE_L1_TTL_MINUTES: "30"
+      CACHE_L2_ENDPOINT: minio:9000
+      CACHE_L2_ACCESS_KEY: ${MINIO_ROOT_USER:-mapex-smoke-admin}
+      CACHE_L2_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-mapex-smoke-password-1234}
+      CACHE_L2_BUCKET: mapex-mqtt-auth
+      CACHE_L2_USE_SSL: "false"
+      FANOUT_INVALIDATE_SUBJECT: mapexos.fanout.asset.invalidate
+    networks:
+      - smoke
+    volumes:
+      - broker-cache:/var/cache/mqtt
+
+  # MinIO client toolbox — official image with `mc` baked in. Sleeps
+  # forever so seed-asset.sh / debugging can `docker exec` into it.
+  tools-mc:
+    image: minio/mc:latest
+    container_name: mapex-smoke-tools-mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - smoke
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mapex-smoke-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mapex-smoke-password-1234}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set mapex http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} >/dev/null
+        echo "tools-mc ready. Try:"
+        echo "  docker exec mapex-smoke-tools-mc mc ls mapex/mapex-mqtt-auth"
+        tail -f /dev/null
+
+  # NATS CLI toolbox — official `nats-box` image. Use it to publish
+  # invalidate events and subscribe to fanout subjects.
+  tools-nats:
+    image: natsio/nats-box:latest
+    container_name: mapex-smoke-tools-nats
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - smoke
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "tools-nats ready. Try:"
+        echo "  docker exec mapex-smoke-tools-nats nats --server nats://nats:4222 pub mapexos.fanout.asset.invalidate '{\"assetUUID\":\"asset-aaa\"}'"
+        echo "  docker exec mapex-smoke-tools-nats nats --server nats://nats:4222 sub '>'"
+        tail -f /dev/null
+
+  # Mosquitto clients — `mosquitto_sub` / `mosquitto_pub` for the CONNECT path.
+  tools-mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: mapex-smoke-tools-mqtt
+    networks:
+      - smoke
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "tools-mqtt ready. Try:"
+        echo "  docker exec -it mapex-smoke-tools-mqtt mosquitto_sub -h broker -p 1883 -u 'org-1:asset-aaa' -P secret -t '#' -v -d"
+        tail -f /dev/null
+
+networks:
+  smoke:
+    name: mapex-smoke
+
+volumes:
+  minio-data:
+  broker-cache:
