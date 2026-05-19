@@ -58,24 +58,32 @@ connect signal is derived from the auth-success edge.
 
 ### MOSQ_EVT_BASIC_AUTH (synchronous, blocks broker)
 
-Fired on every CONNECT with username + password. The plugin:
+Fired on every CONNECT with username + password (and optionally a
+client certificate on the TLS listener). The plugin:
 
-1. Reads `username`, `password`, `clientid` from the C event struct,
-   copying via `C.GoString` so the Go side owns the bytes after the
-   callback returns.
-2. POSTs `{username, password, clientid}` to the assets MS auth URL
-   with `X-API-Key` header. The HTTP client has a 5s timeout (default,
-   configurable).
-3. Maps the response: 200 → `MOSQ_ERR_SUCCESS`, 401 → `MOSQ_ERR_AUTH`,
-   anything else (5xx, network error, timeout) → `MOSQ_ERR_UNKNOWN`
-   (fail-closed). All three terminate the CONNECT immediately.
-4. On 200, derives the connect signal: parses `username` as
-   `{orgId}:{assetUUID}` and enqueues a presence advisory
-   (`event:"connect"`) into the AsyncPublisher.
+1. Reads `username`, `password`, `clientid`, and (when TLS)
+   `certSerial` from the C event struct, copying via `C.GoString` so
+   the Go side owns the bytes after the callback returns.
+2. Parses `username` as the bare `assetUUID` (globally unique).
+3. Looks up the `AuthEntry` via the **TieredAuthStore** (L1 Pebble →
+   L2 MinIO → L3 HTTP fallback). No HTTP round-trip on the warm path.
+4. Determines the auth mode from the entry:
+   - **password mode**: bcrypt-compares `password` against
+     `entry.PasswordHash` locally. A cert-mode asset presenting a
+     password is denied.
+   - **cert mode**: compares the device cert's serial against
+     `entry.CurrentCertSerial`. A password-mode asset presenting a
+     cert is denied.
+5. Maps the result: Allow → `MOSQ_ERR_SUCCESS`, Deny →
+   `MOSQ_ERR_AUTH`, Store error → `MOSQ_ERR_UNKNOWN` (fail-closed).
+6. On Allow, derives the connect signal: enqueues a presence advisory
+   (`event:"connect"`) into the AsyncPublisher and persists the
+   trusted `(orgId, assetUUID)` in the session map.
 
-The HTTP call runs synchronously on the broker thread because
-Mosquitto blocks the CONNECT handshake awaiting the auth decision —
-async is impossible by protocol. The 5s timeout bounds parking time.
+The lookup runs synchronously on the broker thread because Mosquitto
+blocks the CONNECT handshake awaiting the auth decision — async is
+impossible by protocol. The L1 cache keeps p99 well under 1ms for
+warm-path CONNECTs.
 
 ### MOSQ_EVT_ACL_CHECK (synchronous, in-memory)
 
@@ -222,9 +230,10 @@ broker would segfault. Every non-trivial extraction goes through
 | `Enqueue` before `Start` | Rejected, `dropped++` and `droppedNoStart++` (misuse signal). Items would otherwise sit in channel forever |
 | Concurrent `Drain` + `Enqueue` | RWMutex serializes; no panic, no race |
 | `nats.Publish` panics | `defer recover()` per worker, `panics++`, worker keeps draining |
-| Assets MS down | Auth callout times out → `AuthError` → broker denies CONNECT (fail-closed) |
-| Assets MS returns 5xx | Same as above — fail-closed |
-| Assets MS returns 401 | `AuthDeny` → broker rejects CONNECT |
+| All cache layers down | L1 miss + L2 miss + L3 timeout → `AuthError` → broker denies CONNECT (fail-closed) |
+| L2 (MinIO) down | L1 miss falls through to L3 (HTTP); slower but functional |
+| L3 (Assets MS) down | Only matters when L1 + L2 both miss — rare on warm path |
+| Assets MS returns 404 | `AuthDeny` → asset does not exist → broker rejects CONNECT |
 | Username with NATS-illegal chars (`.`, `*`, `>`, whitespace) | Ingress publish dropped with WARN log; nothing leaves the plugin |
 | Payload > 900 KiB | Dropped with WARN identifying asset + topic + size |
 | Plugin compiled against newer Mosquitto than runtime | Plugin v5 API is forward-compatible; events not present at runtime simply never fire |
@@ -254,9 +263,9 @@ Plugin-side state is exposed via methods on `AsyncPublisher` and
 | `DroppedCount` | Total drops — channel full + pre-Start drops |
 | `DroppedNoStartCount` | Drops attributed to misuse (Enqueue before Start) |
 | `PanicCount` | Recovered worker panics — should be zero |
-| `Auth.AllowedCount` | HTTP auth 200s |
-| `Auth.DeniedCount` | HTTP auth 401s |
-| `Auth.ErrorCount` | HTTP auth infra failures |
+| `Auth.AllowedCount` | Auth allowed (password or cert match) |
+| `Auth.DeniedCount` | Auth denied (wrong password, wrong cert, disabled asset) |
+| `Auth.ErrorCount` | Auth infra failures (all cache layers unavailable) |
 | `Auth.RequestCount` | Total auth attempts |
 
 A future expose-via-Prometheus pass can hook these to an HTTP
@@ -267,9 +276,10 @@ inspect via `pprof` or `gdb`-attach if needed.
 
 What the plugin does **not** do, intentionally:
 
-- **No internal auth cache.** The assets MS owns the cache (Ristretto
-  L0). Adding a second cache here would create coherency surface and
-  tie cache invalidation to plugin restarts.
+- **No direct database access.** The plugin reads auth state only
+  through the TieredAuthStore (L1 Pebble → L2 MinIO → L3 HTTP). The
+  assets MS is the sole writer; coherency is driven by FANOUT
+  invalidation.
 - **No QoS 2 message persistence handling.** Mosquitto handles QoS 1+
   retransmits and durable subscriptions via its own persistence
   layer. The plugin only observes the post-ACL `MESSAGE` event.

@@ -90,10 +90,14 @@ deployment. Living in its own repo lets it:
 ├── docker/
 │   ├── Dockerfile         multi-stage builder → mapexos/mapex-broker-mqtt
 │   └── entrypoint.sh      envsubst + sanity check + exec mosquitto
+├── scripts/
+│   └── release/start.sh   build + tag + push workflow
 ├── docs/
 │   ├── architecture.md    how the plugin works internally
-│   └── config.md          environment-variable reference
-└── tests/                 (reserved for integration tests)
+│   ├── config.md          environment-variable reference
+│   └── deploy.md          operator deploy runbook
+└── tests/
+    └── smoke/             minimal smoke test (NATS + MinIO + broker)
 ```
 
 Go sources live under `src/` per project convention. Two import

@@ -91,10 +91,14 @@ MapexOS. Ter seu próprio repositório permite:
 ├── docker/
 │   ├── Dockerfile         builder multi-stage → mapexos/mapex-broker-mqtt
 │   └── entrypoint.sh      envsubst + validação + exec mosquitto
+├── scripts/
+│   └── release/start.sh   workflow de build + tag + push
 ├── docs/
 │   ├── architecture.md    como o plugin funciona internamente
-│   └── config.md          referência de variáveis de ambiente
-└── tests/                 (reservado para testes de integração)
+│   ├── config.md          referência de variáveis de ambiente
+│   └── deploy.md          runbook de deploy para operadores
+└── tests/
+    └── smoke/             smoke test mínimo (NATS + MinIO + broker)
 ```
 
 Os fontes Go ficam em `src/` por convenção do projeto. Dois caminhos

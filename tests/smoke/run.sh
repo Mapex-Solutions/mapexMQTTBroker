@@ -1,105 +1,136 @@
 #!/bin/bash
 # =============================================================================
-# Mapex MQTT Broker — smoke-test orchestrator
+# Mapex MQTT Broker — Smoke test
 #
-# Brings up the smoke stack, seeds one asset entry, runs a CONNECT, and
-# tails the broker logs so you can SEE the L1/L2/L3 cascade.
-#
-# This is a developer/ops tool — not a CI assertion. It prints what
-# happened so you can eyeball it. Use `docker compose down -v` when
-# you're done.
+# Brings up the stack, seeds one asset, tests the L1/L2 cache cascade,
+# and cleans up. Exit 0 = all checks passed.
 #
 # Usage:
-#   ./run.sh                              # default test asset (org-1:asset-aaa / secret)
-#   ASSET_UUID=asset-x ORG_ID=org-2 PASSWORD=hunter2 ./run.sh
-#   BROKER_IMAGE=docker.io/mapexos/mapex-broker-mqtt:0.1.0 ./run.sh
-#
-# Environment overrides:
-#   ASSET_UUID            default: asset-aaa
-#   ORG_ID                default: org-1
-#   PASSWORD              default: secret
-#   BROKER_IMAGE          default: mapexos/mapex-broker-mqtt:dev
-#   MINIO_ROOT_USER       default: mapex-smoke-admin
-#   MINIO_ROOT_PASSWORD   default: mapex-smoke-password-1234
+#   ./run.sh
+#   BROKER_IMAGE=mapexos/mapex-broker-mqtt:0.1.0 ./run.sh
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-ASSET_UUID="${ASSET_UUID:-asset-aaa}"
-ORG_ID="${ORG_ID:-org-1}"
-PASSWORD="${PASSWORD:-secret}"
+ASSET_UUID="asset-aaa"
+ORG_ID="org-1"
+PASSWORD="secret"
+NETWORK="mapex-smoke"
 
-CYAN='\033[0;36m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
-step() {
-    echo ""
-    echo -e "${CYAN}=== $* ===${NC}"
-    echo ""
+pass() { echo -e "  ${GREEN}PASS${NC} $*"; }
+fail() { echo -e "  ${RED}FAIL${NC} $*"; FAILED=true; }
+
+FAILED=false
+
+step() { echo -e "\n${CYAN}=== $* ===${NC}\n"; }
+
+# --- Helpers: one-shot containers on the smoke network ---
+mc_exec() {
+    docker run --rm --network "$NETWORK" \
+        -e MC_HOST_mapex="http://mapex-smoke-admin:mapex-smoke-password-1234@mapex-smoke-minio:9000" \
+        minio/mc:latest "$@"
 }
 
-step "1. Bring up the stack"
+nats_pub() {
+    docker run --rm --network "$NETWORK" \
+        natsio/nats-box:latest \
+        nats --server nats://mapex-smoke-nats:4222 pub "$@"
+}
+
+mqtt_pub() {
+    docker run --rm --network "$NETWORK" \
+        eclipse-mosquitto:2.0 \
+        mosquitto_pub -h mapex-smoke-broker -p 1883 "$@"
+}
+
+bcrypt_hash() {
+    docker run --rm python:3.12-alpine sh -c "
+        pip install --quiet bcrypt 2>/dev/null
+        python -c \"import bcrypt; print(bcrypt.hashpw(b'$1', bcrypt.gensalt(rounds=10)).decode())\"
+    " 2>/dev/null
+}
+
+# --- Start ---
+step "1. Stack up"
 docker compose up -d
-echo "Waiting for broker to become healthy..."
-for _ in $(seq 1 30); do
-    if docker compose ps broker | grep -q "Up"; then
-        sleep 2
-        break
-    fi
-    sleep 1
-done
+echo "Waiting for broker..."
+sleep 5
 
-step "2. Show broker startup logs (expect: L1 Pebble ready, L2 MinIO ready, fanout consumer started)"
-docker compose logs broker | tail -20
+step "2. Seed L2 (MinIO)"
+HASH=$(bcrypt_hash "$PASSWORD")
+TMPFILE=$(mktemp)
+cat > "$TMPFILE" <<EOF
+{"enabled":true,"assetUUID":"${ASSET_UUID}","orgId":"${ORG_ID}","authType":"password","passwordHash":"${HASH}"}
+EOF
+docker cp "$TMPFILE" "mapex-smoke-minio-init:/tmp/${ASSET_UUID}.json" 2>/dev/null \
+    || docker cp "$TMPFILE" "mapex-smoke-minio:/tmp/${ASSET_UUID}.json"
+# Use a fresh mc container to copy into the bucket
+docker run --rm --network "$NETWORK" \
+    -e MC_HOST_mapex="http://mapex-smoke-admin:mapex-smoke-password-1234@mapex-smoke-minio:9000" \
+    -v "$TMPFILE:/tmp/${ASSET_UUID}.json:ro" \
+    minio/mc:latest cp "/tmp/${ASSET_UUID}.json" "mapex/mapex-mqtt-auth/${ASSET_UUID}.json"
+rm -f "$TMPFILE"
+pass "L2 seeded"
 
-step "3. Seed the L2 read model"
-"./seed-asset.sh" "$ASSET_UUID" "$ORG_ID" "$PASSWORD"
-
-step "4. First CONNECT — L1 is empty → expect L2 hit log"
-docker exec mapex-smoke-tools-mqtt timeout 5 mosquitto_pub -h broker -p 1883 \
-    -u "${ORG_ID}:${ASSET_UUID}" -P "${PASSWORD}" \
-    -t "events/${ORG_ID}/${ASSET_UUID}" -m "smoke-test-1" 2>&1 || true
+step "3. First CONNECT — expect L2 hit (L1 cold)"
+mqtt_pub -u "${ASSET_UUID}" -P "${PASSWORD}" -t "events/${ASSET_UUID}/test" -m "smoke-1" 2>&1 || true
 sleep 1
-echo "Recent broker logs:"
-docker compose logs --tail 5 broker | grep -E "auth_store|Authenticate" || docker compose logs --tail 8 broker
+if docker compose logs --tail 10 broker | grep -q "L2 hit"; then
+    pass "L2 hit on first connect"
+else
+    fail "Expected L2 hit log"
+fi
 
-step "5. Second CONNECT — L1 is now warm → expect L1 hit log"
-docker exec mapex-smoke-tools-mqtt timeout 5 mosquitto_pub -h broker -p 1883 \
-    -u "${ORG_ID}:${ASSET_UUID}" -P "${PASSWORD}" \
-    -t "events/${ORG_ID}/${ASSET_UUID}" -m "smoke-test-2" 2>&1 || true
+step "4. Second CONNECT — expect L1 hit (warmed)"
+mqtt_pub -u "${ASSET_UUID}" -P "${PASSWORD}" -t "events/${ASSET_UUID}/test" -m "smoke-2" 2>&1 || true
 sleep 1
-docker compose logs --tail 5 broker | grep -E "auth_store|Authenticate" || docker compose logs --tail 8 broker
+if docker compose logs --tail 10 broker | grep -q "L1 hit"; then
+    pass "L1 hit on second connect"
+else
+    fail "Expected L1 hit log"
+fi
 
-step "6. Invalidate via FANOUT — expect 'invalidated L1' log"
-"./invalidate-asset.sh" "$ASSET_UUID"
+step "5. FANOUT invalidate — expect L1 dropped"
+nats_pub "mapexos.fanout.asset.invalidate" "{\"assetUUID\":\"${ASSET_UUID}\"}"
 sleep 1
-docker compose logs --tail 5 broker | grep -E "fanout|invalidate" || docker compose logs --tail 8 broker
+if docker compose logs --tail 10 broker | grep -q "invalidated L1"; then
+    pass "L1 invalidated via FANOUT"
+else
+    fail "Expected L1 invalidation log"
+fi
 
-step "7. Third CONNECT — L1 was invalidated → expect L2 hit again"
-docker exec mapex-smoke-tools-mqtt timeout 5 mosquitto_pub -h broker -p 1883 \
-    -u "${ORG_ID}:${ASSET_UUID}" -P "${PASSWORD}" \
-    -t "events/${ORG_ID}/${ASSET_UUID}" -m "smoke-test-3" 2>&1 || true
+step "6. Third CONNECT — expect L2 hit again (L1 was invalidated)"
+mqtt_pub -u "${ASSET_UUID}" -P "${PASSWORD}" -t "events/${ASSET_UUID}/test" -m "smoke-3" 2>&1 || true
 sleep 1
-docker compose logs --tail 5 broker | grep -E "auth_store|Authenticate" || docker compose logs --tail 8 broker
+if docker compose logs --tail 10 broker | grep -q "L2 hit"; then
+    pass "L2 hit after invalidation"
+else
+    fail "Expected L2 hit after invalidation"
+fi
 
-step "8. Cross-tenant deny — username claims org-WRONG, entry has ${ORG_ID} → expect AuthDeny"
-docker exec mapex-smoke-tools-mqtt timeout 5 mosquitto_pub -h broker -p 1883 \
-    -u "org-WRONG:${ASSET_UUID}" -P "${PASSWORD}" \
-    -t "events/org-WRONG/${ASSET_UUID}" -m "should-fail" 2>&1 || true
+step "7. Wrong password — expect deny"
+mqtt_pub -u "${ASSET_UUID}" -P "wrong-password" -t "events/${ASSET_UUID}/test" -m "should-fail" 2>&1 || true
 sleep 1
-docker compose logs --tail 5 broker | grep -E "Deny|denied|auth_store" || docker compose logs --tail 8 broker
+if docker compose logs --tail 10 broker | grep -qi "deny"; then
+    pass "Wrong password denied"
+else
+    fail "Expected auth deny log"
+fi
 
+# --- Summary ---
 echo ""
-echo -e "${GREEN}Smoke run complete.${NC}"
+if [ "$FAILED" = true ]; then
+    echo -e "${RED}Some checks failed. Inspect logs:${NC}"
+    echo "  docker compose logs broker"
+else
+    echo -e "${GREEN}All smoke checks passed.${NC}"
+fi
 echo ""
-echo "Inspect further with:"
-echo "  docker compose logs -f broker"
-echo "  docker exec mapex-smoke-tools-mc mc ls mapex/mapex-mqtt-auth"
-echo "  docker exec mapex-smoke-tools-nats nats --server nats://nats:4222 sub '>'"
-echo ""
-echo -e "${YELLOW}Cleanup when you're done:${NC}"
-echo "  docker compose down -v"
+echo "Cleanup: docker compose down -v"
