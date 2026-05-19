@@ -15,13 +15,45 @@ the platform.
 
 | Responsibility | Where it runs |
 |---|---|
-| **Auth** (HTTP callout) | `MOSQ_EVT_BASIC_AUTH` in this plugin → POST to assets MS `/auth/user` |
+| **Auth** (tiered cache) | `MOSQ_EVT_BASIC_AUTH` in this plugin → TieredAuthStore (L1 Pebble → L2 MinIO → L3 HTTP fallback) |
 | **ACL** (allow/deny PUB+SUB) | `MOSQ_EVT_ACL_CHECK` in this plugin → pure-Go string compare, sub-µs, zero hop |
 | **Presence** (online/offline) | `MOSQ_EVT_DISCONNECT` + auth-success → NATS `mqtt.presence.advisory` |
 | **Ingress** (device → platform) | `MOSQ_EVT_MESSAGE` → NATS `mqtt.data.{orgId}.{assetUUID}` |
 
-A single `.so`, four broker hooks, two NATS subjects. No external
-dependencies beyond Mosquitto v2 and a NATS server.
+A single `.so`, four broker hooks, two NATS subjects. No HTTP
+round-trips on the hot auth path — every CONNECT decision (bcrypt for
+password mode, cert-serial-equality for certificate mode) is made
+locally off the cached `AuthEntry` projection.
+
+### Auth modes
+
+Each asset declares one auth mode; the broker enforces mutual exclusion:
+
+| Mode | Wire credentials | Validation |
+|---|---|---|
+| **password** | MQTT username (assetUUID) + password | bcrypt compare against `AuthEntry.PasswordHash` |
+| **cert** | MQTT username (assetUUID) + client certificate on TLS listener (8883) | cert serial equality against `AuthEntry.CurrentCertSerial` |
+
+A password-mode asset that presents a cert is denied. A cert-mode asset
+that connects on the plaintext listener is denied. The broker never
+guesses which credential to validate.
+
+### TieredAuthStore
+
+The plugin makes **zero HTTP auth callouts** on the warm path. Auth
+decisions are served from a three-layer cache:
+
+| Layer | Backend | Latency | Notes |
+|---|---|---|---|
+| **L1** | Pebble on NVMe | ~50µs | Persists across plugin restarts when volume is mounted |
+| **L2** | MinIO bucket `mapex-asset-auth` | ~10ms | Slim `AuthProjection` written by the assets MS on every CRUD |
+| **L3** | HTTP GET to assets MS `/internal/assets/:assetUUID` | ~50ms | Last resort when L1 + L2 both miss |
+
+Self-healing: every L2 hit warms L1; every L3 hit warms L1. The assets
+MS drives L2 writes on every CRUD. A NATS FANOUT consumer
+(`mapexos.fanout.asset.invalidate`) drops stale L1 entries so the next
+CONNECT re-fetches from L2. L1 TTL (default 30min) is a safety net for
+missed invalidations.
 
 The container exposes both the plaintext MQTT port (`1883`) and the
 TLS port (`8883`). TLS is opt-in via `TLS_ENABLED=true` and supports
@@ -47,7 +79,7 @@ deployment. Living in its own repo lets it:
 ├── Makefile               build / push / release targets
 ├── go.mod                 module: github.com/Mapex-Solutions/mapexMQTTBroket
 ├── src/
-│   ├── *.go               broker package: ACL, NATS publisher, HTTP auth, config
+│   ├── *.go               broker package: ACL, TieredAuthStore, NATS publisher, config
 │   ├── *_test.go          Go-pure unit tests (no broker, no NATS required)
 │   └── plugin/
 │       ├── main.go        cgo entry — plugin lifecycle + 4 hooks
@@ -83,13 +115,15 @@ services:
       - "1883:1883"
     environment:
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?required}
-      NATS_URL: nats://nats:4222
+      NATS_URL: nats://nats-core:4222
       ASSETS_HOST: assets
       ASSETS_PORT: "5002"
       NATS_SUBJECT_PRESENCE: dev.mapexos.mqtt.presence.advisory
       NATS_SUBJECT_INGRESS_PREFIX: dev.mapexos.mqtt.data
+    volumes:
+      - mqtt-cache:/var/cache/mqtt    # L1 Pebble persistence
     depends_on:
-      nats:
+      nats-core:
         condition: service_healthy
       assets:
         condition: service_started
@@ -137,7 +171,7 @@ and pushes `:VERSION` + `:latest` in a single command.
 | Mosquitto | 2.0.x (Debian bookworm package) |
 | Plugin API | v5 |
 | NATS server | 2.10+ (Core Pub/Sub used; JetStream optional, captured upstream) |
-| Go | 1.25 |
+| Go | 1.25.3+ |
 | Runtime base | `debian:bookworm-slim` (glibc; Alpine breaks cgo TLS) |
 
 ## Tagging convention
