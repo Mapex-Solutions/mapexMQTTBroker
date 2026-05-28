@@ -1,10 +1,32 @@
 # Mapex MQTT Broker
 
-> Production MQTT broker for the MapexOS IoT platform — Eclipse
-> Mosquitto v2 + a single in-house plugin that handles **auth**,
-> **ACL**, **presence**, and **ingress** in one Go binary.
-> Distributed as a ready-to-pull Docker image
-> (`mapexos/mapex-broker-mqtt`).
+> Production MQTT broker for the [MapexOS](https://github.com/Mapex-Solutions/mapexOS)
+> platform — Eclipse Mosquitto v2 + a single in-house plugin that handles
+> **auth**, **ACL**, **presence**, and **ingress** in one Go binary.
+> Distributed as a ready-to-pull Docker image (`mapexos/mapex-broker-mqtt`).
+
+### About MapexOS
+
+> **IoT-first, but not limited to IoT.**
+> MapexOS doesn't see devices or sensors — it sees **Assets**.
+> Any source. Any protocol. One abstraction.
+>
+> **Connect. Automate. Scale.** — The open platform for data integration
+> and intelligent automation.
+
+```
+   Sources                       MapexOS                         Destinations
+   ───────                       ───────                         ────────────
+   Devices ──┐                                              ┌── Webhooks / APIs
+   Gateways ─┤   Ingest → Validate → Transform → Route →    ├── Slack / Teams / Email
+   APIs ─────┼──        Store / Notify / Automate           ├── NATS / MQTT
+   Apps ─────┤                                              └── Custom plugins
+   3rd-party ┘
+```
+
+This broker sits at the **MQTT ingress edge** of that pipeline.
+
+[Versão em português](./README_pt.md) · [Documentation site](https://mapexos.io)
 
 ## What this project is
 
