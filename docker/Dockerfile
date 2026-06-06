@@ -51,7 +51,7 @@ RUN GOWORK=off CGO_ENABLED=1 \
         -tags=cgo_mosquitto_plugin \
         -buildmode=c-shared \
         -o /out/mapex-broker.so \
-        ./src/plugin
+        ./src
 
 ###############################################################################
 # Stage 2: runtime
