@@ -78,7 +78,7 @@ func (a *AuthClient) CompareLocal(hash, plaintext string) bool {
 
 // LookupEntry fetches the slim AuthProjection for the given asset UUID via
 // a read-only GET on the assets service internal endpoint
-// (/internal/asset-auth/:assetUUID). Used by the tiered store as the L3
+// (/internal/asset_auth/:assetUUID). Used by the tiered store as the L3
 // fallback when L1 (Pebble) and L2 (MinIO) both miss.
 //
 // The response body is the assets service AuthProjection wrapped in the

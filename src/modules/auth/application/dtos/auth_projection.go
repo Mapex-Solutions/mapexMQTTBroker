@@ -9,7 +9,7 @@ import (
 )
 
 // AuthProjection mirrors the slim contract written by the assets service to
-// `mapex-asset-auth` and returned by `/internal/asset-auth/:uuid`. Forward-
+// `mapex-asset-auth` and returned by `/internal/asset_auth/:uuid`. Forward-
 // compatible because json.Unmarshal ignores unknown keys. The MQTT auth fields
 // are nested under `mqtt` (symmetric with the LNS `lorawan` block) and flatten
 // into AuthEntry on projection.

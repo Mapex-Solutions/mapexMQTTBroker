@@ -36,7 +36,7 @@ func (d *recordingDoer) Do(req *http.Request) (*http.Response, error) {
 func newAuthClientWithDoer(t *testing.T, doer HTTPDoer) *AuthClient {
 	t.Helper()
 	a, err := NewAuthClient(AuthClientConfig{
-		URL:    "http://assets:5002/internal/asset-auth",
+		URL:    "http://assets:5002/internal/asset_auth",
 		APIKey: "secret-test-key",
 	}, nil)
 	if err != nil {
@@ -52,7 +52,7 @@ func TestNewAuthClient_ValidatesArgs(t *testing.T) {
 		cfg  AuthClientConfig
 	}{
 		{"missing url", AuthClientConfig{APIKey: "k"}},
-		{"missing api key", AuthClientConfig{URL: "http://x/internal/asset-auth"}},
+		{"missing api key", AuthClientConfig{URL: "http://x/internal/asset_auth"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestNewAuthClient_ValidatesArgs(t *testing.T) {
 
 // validReadModelBody is the platform's standard response envelope
 // (`{status, errors, data}`) carrying the slim AuthProjection the
-// /internal/asset-auth/:assetUUID endpoint returns.
+// /internal/asset_auth/:assetUUID endpoint returns.
 const validReadModelBody = `{
     "status": 200,
     "errors": null,
@@ -182,8 +182,8 @@ func TestLookupEntry_SendsApiKeyHeaderAndUUIDPath(t *testing.T) {
 			if got := req.Header.Get("X-API-Key"); got != "secret-test-key" {
 				t.Errorf("X-API-Key header = %q, want secret-test-key", got)
 			}
-			if !strings.HasSuffix(req.URL.Path, "/internal/asset-auth/asset-aaa") {
-				t.Errorf("URL path = %q, want suffix /internal/asset-auth/asset-aaa", req.URL.Path)
+			if !strings.HasSuffix(req.URL.Path, "/internal/asset_auth/asset-aaa") {
+				t.Errorf("URL path = %q, want suffix /internal/asset_auth/asset-aaa", req.URL.Path)
 			}
 			if req.Method != http.MethodGet {
 				t.Errorf("method = %s, want GET", req.Method)
@@ -211,7 +211,7 @@ func TestLookupEntry_AgainstRealServer(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		if !strings.HasSuffix(r.URL.Path, "/internal/asset-auth/asset-aaa") {
+		if !strings.HasSuffix(r.URL.Path, "/internal/asset_auth/asset-aaa") {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -221,7 +221,7 @@ func TestLookupEntry_AgainstRealServer(t *testing.T) {
 	defer srv.Close()
 
 	a, err := NewAuthClient(AuthClientConfig{
-		URL:     srv.URL + "/internal/asset-auth",
+		URL:     srv.URL + "/internal/asset_auth",
 		APIKey:  "real-key",
 		Timeout: 2 * time.Second,
 	}, nil)
@@ -245,7 +245,7 @@ func TestLookupEntry_TimeoutTriggersError(t *testing.T) {
 	defer srv.Close()
 
 	a, err := NewAuthClient(AuthClientConfig{
-		URL:     srv.URL + "/internal/asset-auth",
+		URL:     srv.URL + "/internal/asset_auth",
 		APIKey:  "k",
 		Timeout: 50 * time.Millisecond,
 	}, nil)

@@ -50,7 +50,7 @@ max_queued_messages 1000
 ###############################################################################
 plugin /usr/lib/mosquitto/mapex-broker.so
 
-plugin_opt_auth_url      http://${ASSETS_HOST}:${ASSETS_PORT}/internal/asset-auth
+plugin_opt_auth_url      http://${ASSETS_HOST}:${ASSETS_PORT}/internal/asset_auth
 plugin_opt_auth_api_key  ${INTERNAL_API_KEY}
 plugin_opt_auth_timeout_seconds ${AUTH_TIMEOUT_SECONDS}
 

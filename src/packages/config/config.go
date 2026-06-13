@@ -14,7 +14,7 @@ import (
 //
 // Required keys:
 //   - "nats_url"
-//   - "auth_url"      assets service callout, e.g. http://assets:5002/internal/asset-auth
+//   - "auth_url"      assets service callout, e.g. http://assets:5002/internal/asset_auth
 //   - "auth_api_key"  shared secret on the X-API-Key header
 //
 // Optional keys fall back to defaults when absent or empty. Invalid integer

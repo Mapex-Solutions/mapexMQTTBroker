@@ -21,7 +21,7 @@ import (
 func realFallbackClient(t *testing.T, srvURL string) *httpauth.AuthClient {
 	t.Helper()
 	a, err := httpauth.NewAuthClient(httpauth.AuthClientConfig{
-		URL:    srvURL + "/internal/asset-auth",
+		URL:    srvURL + "/internal/asset_auth",
 		APIKey: "test",
 	}, nil)
 	if err != nil {

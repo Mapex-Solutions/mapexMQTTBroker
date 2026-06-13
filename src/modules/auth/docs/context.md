@@ -51,5 +51,5 @@ None. The module is read-only against the assets service.
 - Produces a `Decision` consumed by the cgo entry to drive **session** and
   **presence** on allow.
 - Reads asset auth projections produced by the **assets** service (L2 bucket
-  `mapex-asset-auth`, L3 `/internal/asset-auth/:assetUUID`), invalidated by its
+  `mapex-asset-auth`, L3 `/internal/asset_auth/:assetUUID`), invalidated by its
   fanout on every asset CRUD.

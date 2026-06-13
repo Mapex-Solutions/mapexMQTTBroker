@@ -13,7 +13,7 @@ import (
 // the assets service as the L3 fallback of the tiered auth store.
 type AuthClientConfig struct {
 	// URL is the base of the assets service auth-projection fallback.
-	// Example: "http://assets:5002/internal/asset-auth". The plugin appends
+	// Example: "http://assets:5002/internal/asset_auth". The plugin appends
 	// "/:assetUUID" per request.
 	URL string
 
