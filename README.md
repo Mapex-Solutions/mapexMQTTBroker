@@ -39,7 +39,7 @@ the platform.
 |---|---|
 | **Auth** (tiered cache) | `MOSQ_EVT_BASIC_AUTH` in this plugin → TieredAuthStore (L1 Pebble → L2 MinIO → L3 HTTP fallback) |
 | **ACL** (allow/deny PUB+SUB) | `MOSQ_EVT_ACL_CHECK` in this plugin → pure-Go string compare, sub-µs, zero hop |
-| **Presence** (online/offline) | `MOSQ_EVT_DISCONNECT` + auth-success → NATS `mqtt.presence.advisory` |
+| **Presence** (online/offline) | `MOSQ_EVT_DISCONNECT` + auth-success → NATS `presence.advisory` |
 | **Ingress** (device → platform) | `MOSQ_EVT_MESSAGE` → NATS `mqtt.data.{orgId}.{assetUUID}` |
 
 A single `.so`, four broker hooks, two NATS subjects. No HTTP
@@ -144,7 +144,7 @@ services:
       NATS_URL: nats://nats-core:4222
       ASSETS_HOST: assets
       ASSETS_PORT: "5002"
-      NATS_SUBJECT_PRESENCE: dev.mapexos.mqtt.presence.advisory
+      NATS_SUBJECT_PRESENCE: dev.mapexos.presence.advisory
       NATS_SUBJECT_INGRESS_PREFIX: dev.mapexos.mqtt.data
     volumes:
       - mqtt-cache:/var/cache/mqtt    # L1 Pebble persistence

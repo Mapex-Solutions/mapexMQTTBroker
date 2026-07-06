@@ -42,13 +42,13 @@ sem colisões.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NATS_SUBJECT_PRESENCE` | `dev.mapexos.mqtt.presence.advisory` | Subject for `event:"connect"` and `event:"disconnect"` advisories. The healthmonitor module subscribes here. |
+| `NATS_SUBJECT_PRESENCE` | `dev.mapexos.presence.advisory` | Subject for `event:"connect"` and `event:"disconnect"` advisories. The healthmonitor module subscribes here. |
 | `NATS_SUBJECT_INGRESS_PREFIX` | `dev.mapexos.mqtt.data` | Leading subject token for device PUBLISH events. The plugin appends `.{orgId}.{assetUUID}` per message — JS-Executor's wildcard consumer at `{prefix}.>` routes to per-device filter chains. |
 
 Deployments em produção sobrescrevem o prefixo, por exemplo:
 
 ```yaml
-NATS_SUBJECT_PRESENCE: prod.mapexos.mqtt.presence.advisory
+NATS_SUBJECT_PRESENCE: prod.mapexos.presence.advisory
 NATS_SUBJECT_INGRESS_PREFIX: prod.mapexos.mqtt.data
 ```
 
@@ -119,7 +119,7 @@ configuração renderizada e o ciclo de vida de inicialização do plugin no std
 
 ```
 [ENTRYPOINT] config rendered: listener=1883 nats=nats://nats:4222 assets=assets:5002
-[ENTRYPOINT] subjects: presence=dev.mapexos.mqtt.presence.advisory ingress_prefix=dev.mapexos.mqtt.data
+[ENTRYPOINT] subjects: presence=dev.mapexos.presence.advisory ingress_prefix=dev.mapexos.mqtt.data
 INFO  [PLUGIN:Mosquitto] plugin_init: starting
 INFO  [PLUGIN:Mosquitto] NATS connected url=nats://nats:4222 server=nats://nats:4222
 INFO  [PLUGIN:Mosquitto] AsyncPublisher started: workers=4 buffer=10000
@@ -148,7 +148,7 @@ services:
       NATS_URL: nats://nats-core:4222
       ASSETS_HOST: assets
       ASSETS_PORT: "5002"
-      NATS_SUBJECT_PRESENCE: ${GO_ENV:-prod}.mapexos.mqtt.presence.advisory
+      NATS_SUBJECT_PRESENCE: ${GO_ENV:-prod}.mapexos.presence.advisory
       NATS_SUBJECT_INGRESS_PREFIX: ${GO_ENV:-prod}.mapexos.mqtt.data
       AUTH_TIMEOUT_SECONDS: "5"
       PLUGIN_WORKER_POOL_SIZE: "8"
