@@ -3,11 +3,16 @@ module github.com/Mapex-Solutions/mapexMQTTBroket
 go 1.25.3
 
 require (
+	github.com/Mapex-Solutions/mapexGoKit/contracts v0.0.0
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/minio/minio-go/v7 v7.1.0
 	github.com/nats-io/nats.go v1.52.0
 	golang.org/x/crypto v0.49.0
 )
+
+// mapexGoKit is a sibling repo; contracts is a zero-dependency module shared by
+// every edge server so the presence advisory has a single source of truth.
+replace github.com/Mapex-Solutions/mapexGoKit/contracts => ../mapexGoKit/contracts
 
 require (
 	github.com/DataDog/zstd v1.4.5 // indirect
