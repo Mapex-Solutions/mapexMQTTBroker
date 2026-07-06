@@ -61,6 +61,7 @@ import "C"
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -69,6 +70,7 @@ import (
 
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/bootstrap"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/auth"
+	otastatussvc "github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/otastatus/domain/services"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/packages/config"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/packages/logging"
 	natsbus "github.com/Mapex-Solutions/mapexMQTTBroket/src/packages/messaging/nats"
@@ -176,6 +178,7 @@ func mosquitto_plugin_init(
 		Publisher: nc,
 		NatsConn:  nc,
 		Log:       log,
+		Deliverer: mosquittoDeliverer{},
 	})
 	if err != nil {
 		log.Error("[MODULE:Broker] plugin_init: app build failed err=%v", err)
@@ -392,9 +395,45 @@ func goOnMessage(event C.int, eventData unsafe.Pointer, userdata unsafe.Pointer)
 	if !ok {
 		return C.MOSQ_ERR_SUCCESS
 	}
+
+	// OTA status reports (events/{assetUUID}/ota_status) are control
+	// messages, not telemetry: they become the OTA advisory and skip the
+	// uplink ingress pipeline. Identity comes from the session, never the
+	// topic/payload.
+	if otastatussvc.IsStatusTopic(topic) {
+		rt.OTAStatus.HandleStatusReport(info.OrgID, info.AssetUUID, payload, time.Now().UTC())
+		return C.MOSQ_ERR_SUCCESS
+	}
+
 	rt.Ingress.Publish(info.OrgID, info.AssetUUID, clientID, topic, payload,
 		int(ed.qos), bool(ed.retain), time.Now().UTC())
 	return C.MOSQ_ERR_SUCCESS
+}
+
+// mosquittoDeliverer implements the downlink Deliverer over
+// mosquitto_broker_publish_copy (the broker copies the payload, so the Go
+// slice stays owned by Go). clientid=NULL publishes broker-wide to the topic;
+// the ACL guarantees only the device whose assetUUID is in the topic can be
+// subscribed, so broker-wide IS device-targeted.
+type mosquittoDeliverer struct{}
+
+// Deliver publishes the payload to the broker-local topic. Called from the
+// NATS consumer goroutine — mosquitto_broker_publish_copy queues the message
+// into the broker loop.
+func (mosquittoDeliverer) Deliver(topic string, payload []byte, qos int) error {
+	ctopic := C.CString(topic)
+	defer C.free(unsafe.Pointer(ctopic))
+
+	var payloadPtr unsafe.Pointer
+	if len(payload) > 0 {
+		payloadPtr = unsafe.Pointer(&payload[0])
+	}
+
+	rc := C.mosquitto_broker_publish_copy(nil, ctopic, C.int(len(payload)), payloadPtr, C.int(qos), C._Bool(false), nil)
+	if rc != C.MOSQ_ERR_SUCCESS {
+		return fmt.Errorf("mosquitto_broker_publish_copy rc=%d topic=%s", int(rc), topic)
+	}
+	return nil
 }
 
 // main is required by cgo c-shared mode but is never executed —

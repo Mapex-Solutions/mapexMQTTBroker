@@ -19,7 +19,7 @@ closes, translating broker disconnect reason codes into stable text buckets.
 ## Published Events (driven — outbound)
 | Event | Subject | Payload (ref) | Consumers |
 |-------|---------|----------------|-----------|
-| Connect / disconnect | `{env}.mapexos.mqtt.presence.advisory` | `application/dtos.PresenceAdvisory` | healthmonitor |
+| Connect / disconnect | `{env}.mapexos.presence.advisory` | `application/dtos.PresenceAdvisory` | healthmonitor |
 
 ## Consumed Events (driving — inbound)
 None — invoked directly by the cgo entry.

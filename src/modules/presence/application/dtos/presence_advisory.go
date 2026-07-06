@@ -1,19 +1,9 @@
 package dtos
 
-import "time"
+import presence "github.com/Mapex-Solutions/mapexGoKit/contracts/presence"
 
 // PresenceAdvisory is the NATS payload published on every device CONNECT and
-// DISCONNECT. Mirrors the healthmonitor.PresenceAdvisory contract on the
-// consumer side; field names + JSON tags MUST stay in sync. The plugin lives
-// in goKit (no access to MapexOS contracts to avoid circular imports), so
-// this duplication is intentional and tracked.
-type PresenceAdvisory struct {
-	Event      string    `json:"event"`
-	OrgID      string    `json:"orgId"`
-	AssetUUID  string    `json:"assetUUID"`
-	ClientID   string    `json:"clientId,omitempty"`
-	SourceIP   string    `json:"sourceIp,omitempty"`
-	Timestamp  time.Time `json:"timestamp"`
-	ReasonCode int       `json:"reasonCode,omitempty"`
-	ReasonText string    `json:"reasonText,omitempty"`
-}
+// DISCONNECT. It aliases the shared edge-presence contract in mapexGoKit so the
+// broker, the LNS, and the assets healthmonitor all marshal the exact same
+// shape on the same subject — no duplication, no drift.
+type PresenceAdvisory = presence.Advisory

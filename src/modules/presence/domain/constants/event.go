@@ -1,8 +1,13 @@
 package constants
 
-// Event values used in a presence advisory's Event field. Single source of
-// truth so the broker and its consumers reference the same tokens.
+import presence "github.com/Mapex-Solutions/mapexGoKit/contracts/presence"
+
+// Event and protocol values for a presence advisory, aliased from the shared
+// edge-presence contract so the broker and every consumer reference the exact
+// same tokens.
 const (
-	EventConnect    = "connect"
-	EventDisconnect = "disconnect"
+	EventConnect    = presence.EventConnect
+	EventDisconnect = presence.EventDisconnect
+
+	ProtocolMQTT = presence.ProtocolMQTT
 )

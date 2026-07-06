@@ -27,6 +27,7 @@ func (s *Service) PublishConnect(orgID, assetUUID, clientID, sourceIP string, ts
 		textutil.Truncate(orgID, 64), textutil.Truncate(assetUUID, 64), textutil.Truncate(clientID, 64), sourceIP)
 	adv := dtos.PresenceAdvisory{
 		Event:     constants.EventConnect,
+		Protocol:  constants.ProtocolMQTT,
 		OrgID:     orgID,
 		AssetUUID: assetUUID,
 		ClientID:  clientID,
@@ -45,6 +46,7 @@ func (s *Service) PublishDisconnect(orgID, assetUUID, clientID, sourceIP string,
 		textutil.Truncate(orgID, 64), textutil.Truncate(assetUUID, 64), textutil.Truncate(clientID, 64), reason, reasonCode)
 	adv := dtos.PresenceAdvisory{
 		Event:      constants.EventDisconnect,
+		Protocol:   constants.ProtocolMQTT,
 		OrgID:      orgID,
 		AssetUUID:  assetUUID,
 		ClientID:   clientID,

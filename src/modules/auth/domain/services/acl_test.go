@@ -43,6 +43,45 @@ func TestCheckACL_Table(t *testing.T) {
 			want:     false,
 		},
 		{
+			// OTA status report — the device publishes progress on its own
+			// events topic; the existing contract already covers it.
+			name:     "ota status publish allowed (own asset)",
+			username: "asset-aaa",
+			topic:    "events/asset-aaa/ota_status",
+			acc:      constants.AccessWrite,
+			want:     true,
+		},
+		{
+			name:     "ota status publish denied (foreign asset)",
+			username: "asset-aaa",
+			topic:    "events/asset-bbb/ota_status",
+			acc:      constants.AccessWrite,
+			want:     false,
+		},
+		{
+			// OTA command delivery — the device subscribes to its own
+			// commands topic; the downlink module publishes there.
+			name:     "ota command subscribe allowed (own asset)",
+			username: "asset-aaa",
+			topic:    "commands/asset-aaa/ota_update",
+			acc:      constants.AccessSubscribe,
+			want:     true,
+		},
+		{
+			name:     "ota command subscribe denied (foreign asset)",
+			username: "asset-aaa",
+			topic:    "commands/asset-bbb/ota_update",
+			acc:      constants.AccessSubscribe,
+			want:     false,
+		},
+		{
+			name:     "ota command publish denied (devices never publish commands)",
+			username: "asset-aaa",
+			topic:    "commands/asset-aaa/ota_update",
+			acc:      constants.AccessWrite,
+			want:     false,
+		},
+		{
 			name:     "commands subscribe allowed",
 			username: "asset-aaa",
 			topic:    "commands/asset-aaa/relay",

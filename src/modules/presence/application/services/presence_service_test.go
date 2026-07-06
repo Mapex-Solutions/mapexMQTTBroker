@@ -11,7 +11,7 @@ import (
 	natsbus "github.com/Mapex-Solutions/mapexMQTTBroket/src/packages/messaging/nats"
 )
 
-const testPresenceSubject = "test.mapexos.mqtt.presence.advisory"
+const testPresenceSubject = "test.mapexos.presence.advisory"
 
 // recordingPublisher captures the (subject, payload) pairs the async pool
 // drains so a presence test can assert what reached NATS.
