@@ -15,7 +15,7 @@
 # Operator MAY override (defaults applied by the entrypoint):
 #   - MQTT_LISTENER_PORT             1883
 #   - MQTT_MAX_CONNECTIONS           -1 (unlimited)
-#   - NATS_SUBJECT_PRESENCE          dev.mapexos.mqtt.presence.advisory
+#   - NATS_SUBJECT_PRESENCE          dev.mapexos.presence.advisory
 #   - NATS_SUBJECT_INGRESS_PREFIX    dev.mapexos.mqtt.data
 #   - AUTH_TIMEOUT_SECONDS           5
 #   - PLUGIN_WORKER_POOL_SIZE        4

@@ -47,8 +47,16 @@ func NewTieredAuthStore(cfg TieredAuthStoreConfig) (*TieredAuthStore, error) {
 	}
 
 	if cfg.L2Endpoint != "" {
+		// Static keys when the deployment provides them; otherwise the ambient IAM
+		// credential chain (instance profile / IRSA) — see L2AuthIsNeeded.
+		var creds *credentials.Credentials
+		if cfg.L2AuthIsNeeded {
+			creds = credentials.NewStaticV4(cfg.L2AccessKey, cfg.L2SecretKey, "")
+		} else {
+			creds = credentials.NewIAM("")
+		}
 		mc, err := minio.New(cfg.L2Endpoint, &minio.Options{
-			Creds:  credentials.NewStaticV4(cfg.L2AccessKey, cfg.L2SecretKey, ""),
+			Creds:  creds,
 			Secure: cfg.L2UseSSL,
 		})
 		if err != nil {

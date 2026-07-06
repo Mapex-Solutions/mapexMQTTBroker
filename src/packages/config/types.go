@@ -67,9 +67,28 @@ type Config struct {
 	CacheL2SecretKey string
 	CacheL2Bucket    string
 	CacheL2UseSSL    bool
+	// CacheL2AuthIsNeeded selects static keys (true) vs ambient IAM (false) for
+	// the L2 object-store client.
+	CacheL2AuthIsNeeded bool
 
 	// FanoutInvalidateSubject is the NATS subject the broker plugin listens
 	// on to drop L1 entries when the assets service publishes an
 	// invalidation. Default "mapexos.fanout.asset.invalidate".
 	FanoutInvalidateSubject string
+
+	// SubjectOTAStatus is the STATIC env-prefixed subject the plugin
+	// publishes OTA status advisories to (device identity in the payload).
+	// The operator overrides the env prefix like SubjectPresence.
+	SubjectOTAStatus string
+
+	// SubjectDownlink / StreamDownlink identify the STATIC env-prefixed
+	// mqtt.downlink subject and its JetStream stream (provisioned by the
+	// deployment nats-init; the plugin binds a durable consumer).
+	SubjectDownlink string
+	StreamDownlink  string
+
+	// DownlinkDurable / DownlinkQueue name the durable consumer and its
+	// queue group — one broker node handles each command.
+	DownlinkDurable string
+	DownlinkQueue   string
 }

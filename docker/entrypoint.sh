@@ -17,7 +17,7 @@
 #   MQTT_MAX_CONNECTIONS           -1 (unlimited)
 #   ASSETS_HOST                    assets
 #   ASSETS_PORT                    5002
-#   NATS_SUBJECT_PRESENCE          dev.mapexos.mqtt.presence.advisory
+#   NATS_SUBJECT_PRESENCE          dev.mapexos.presence.advisory
 #   NATS_SUBJECT_INGRESS_PREFIX    dev.mapexos.mqtt.data
 #   AUTH_TIMEOUT_SECONDS           5
 #   PLUGIN_WORKER_POOL_SIZE        4
@@ -43,7 +43,7 @@ export MQTT_LISTENER_PORT="${MQTT_LISTENER_PORT:-1883}"
 export MQTT_MAX_CONNECTIONS="${MQTT_MAX_CONNECTIONS:--1}"
 export ASSETS_HOST="${ASSETS_HOST:-assets}"
 export ASSETS_PORT="${ASSETS_PORT:-5002}"
-export NATS_SUBJECT_PRESENCE="${NATS_SUBJECT_PRESENCE:-dev.mapexos.mqtt.presence.advisory}"
+export NATS_SUBJECT_PRESENCE="${NATS_SUBJECT_PRESENCE:-dev.mapexos.presence.advisory}"
 export NATS_SUBJECT_INGRESS_PREFIX="${NATS_SUBJECT_INGRESS_PREFIX:-dev.mapexos.mqtt.data}"
 export AUTH_TIMEOUT_SECONDS="${AUTH_TIMEOUT_SECONDS:-5}"
 export PLUGIN_WORKER_POOL_SIZE="${PLUGIN_WORKER_POOL_SIZE:-4}"
@@ -54,10 +54,11 @@ export PLUGIN_BUFFER_SIZE="${PLUGIN_BUFFER_SIZE:-10000}"
 # disables L2; the plugin always retains L3 (HTTP) as last resort.
 export CACHE_L1_PATH="${CACHE_L1_PATH:-/var/cache/mqtt}"
 export CACHE_L1_TTL_MINUTES="${CACHE_L1_TTL_MINUTES:-30}"
-export CACHE_L2_ENDPOINT="${CACHE_L2_ENDPOINT:-}"
-export CACHE_L2_ACCESS_KEY="${CACHE_L2_ACCESS_KEY:-}"
-export CACHE_L2_SECRET_KEY="${CACHE_L2_SECRET_KEY:-}"
-export CACHE_L2_USE_SSL="${CACHE_L2_USE_SSL:-false}"
+export OBJECT_STORE_ENDPOINT="${OBJECT_STORE_ENDPOINT:-}"
+export OBJECT_STORE_ACCESS_KEY="${OBJECT_STORE_ACCESS_KEY:-}"
+export OBJECT_STORE_SECRET_KEY="${OBJECT_STORE_SECRET_KEY:-}"
+export OBJECT_STORE_USE_SSL="${OBJECT_STORE_USE_SSL:-false}"
+export OBJECT_STORE_AUTH_IS_NEEDED="${OBJECT_STORE_AUTH_IS_NEEDED:-true}"
 # CACHE_L2_BUCKET is intentionally NOT exposed — the bucket name is
 # fixed by the platform contract with the assets MS (mapex-assets,
 # key `{orgId}/{assetUUID}.json`). The plugin hardcodes it; operators
@@ -123,10 +124,11 @@ envsubst '
     ${PLUGIN_BUFFER_SIZE}
     ${CACHE_L1_PATH}
     ${CACHE_L1_TTL_MINUTES}
-    ${CACHE_L2_ENDPOINT}
-    ${CACHE_L2_ACCESS_KEY}
-    ${CACHE_L2_SECRET_KEY}
-    ${CACHE_L2_USE_SSL}
+    ${OBJECT_STORE_ENDPOINT}
+    ${OBJECT_STORE_ACCESS_KEY}
+    ${OBJECT_STORE_SECRET_KEY}
+    ${OBJECT_STORE_USE_SSL}
+    ${OBJECT_STORE_AUTH_IS_NEEDED}
     ${FANOUT_INVALIDATE_SUBJECT}
 ' < "$TEMPLATE" > "$RENDERED"
 
@@ -176,19 +178,20 @@ fi
 # Conditionally append the L2 (MinIO) plugin_opts. Mosquitto 2.0.x
 # rejects empty plugin_opt values, so the L2 stanza only lands when
 # the operator set the endpoint.
-if [ -n "$CACHE_L2_ENDPOINT" ]; then
+if [ -n "$OBJECT_STORE_ENDPOINT" ]; then
     {
         echo ""
-        echo "# TieredStore L2 (MinIO) — appended by entrypoint when CACHE_L2_ENDPOINT is set."
+        echo "# TieredStore L2 (object store) — appended by entrypoint when OBJECT_STORE_ENDPOINT is set."
         echo "# Bucket name is fixed by the platform contract; operators only configure endpoint + credentials."
-        echo "plugin_opt_cache_l2_endpoint     ${CACHE_L2_ENDPOINT}"
-        [ -n "$CACHE_L2_ACCESS_KEY" ] && echo "plugin_opt_cache_l2_access_key   ${CACHE_L2_ACCESS_KEY}"
-        [ -n "$CACHE_L2_SECRET_KEY" ] && echo "plugin_opt_cache_l2_secret_key   ${CACHE_L2_SECRET_KEY}"
-        echo "plugin_opt_cache_l2_use_ssl      ${CACHE_L2_USE_SSL}"
+        echo "plugin_opt_object_store_endpoint         ${OBJECT_STORE_ENDPOINT}"
+        [ -n "$OBJECT_STORE_ACCESS_KEY" ] && echo "plugin_opt_object_store_access_key       ${OBJECT_STORE_ACCESS_KEY}"
+        [ -n "$OBJECT_STORE_SECRET_KEY" ] && echo "plugin_opt_object_store_secret_key       ${OBJECT_STORE_SECRET_KEY}"
+        echo "plugin_opt_object_store_use_ssl          ${OBJECT_STORE_USE_SSL}"
+        echo "plugin_opt_object_store_auth_is_needed   ${OBJECT_STORE_AUTH_IS_NEEDED}"
     } >> "$RENDERED"
-    echo "[ENTRYPOINT] L2 MinIO appended: endpoint=${CACHE_L2_ENDPOINT}"
+    echo "[ENTRYPOINT] L2 object store appended: endpoint=${OBJECT_STORE_ENDPOINT}"
 else
-    echo "[ENTRYPOINT] L2 MinIO disabled (CACHE_L2_ENDPOINT empty); plugin uses L1 + L3 only"
+    echo "[ENTRYPOINT] L2 object store disabled (OBJECT_STORE_ENDPOINT empty); plugin uses L1 + L3 only"
 fi
 
 # Sanity check: complain loudly if any unsubstituted ${VAR} survived

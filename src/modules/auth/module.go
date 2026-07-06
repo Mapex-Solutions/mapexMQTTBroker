@@ -39,13 +39,14 @@ type Config struct {
 	AuthAPIKey  string
 	AuthTimeout time.Duration
 
-	CacheL1Path      string
-	CacheL1TTL       time.Duration
-	CacheL2Endpoint  string
-	CacheL2AccessKey string
-	CacheL2SecretKey string
-	CacheL2Bucket    string
-	CacheL2UseSSL    bool
+	CacheL1Path         string
+	CacheL1TTL          time.Duration
+	CacheL2Endpoint     string
+	CacheL2AccessKey    string
+	CacheL2SecretKey    string
+	CacheL2Bucket       string
+	CacheL2UseSSL       bool
+	CacheL2AuthIsNeeded bool
 
 	FanoutSubject string
 }
@@ -82,9 +83,10 @@ func Build(cfg Config, nc *nats.Conn, log logging.Logger) (*Module, error) {
 		L2Endpoint:  cfg.CacheL2Endpoint,
 		L2AccessKey: cfg.CacheL2AccessKey,
 		L2SecretKey: cfg.CacheL2SecretKey,
-		L2Bucket:    cfg.CacheL2Bucket,
-		L2UseSSL:    cfg.CacheL2UseSSL,
-		L3Client:    client,
+		L2Bucket:       cfg.CacheL2Bucket,
+		L2UseSSL:       cfg.CacheL2UseSSL,
+		L2AuthIsNeeded: cfg.CacheL2AuthIsNeeded,
+		L3Client:       client,
 		L1TTL:       cfg.CacheL1TTL,
 		Log:         log,
 	})

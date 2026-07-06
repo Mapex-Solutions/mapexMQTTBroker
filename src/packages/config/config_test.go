@@ -36,7 +36,7 @@ func TestLoadConfig_AcceptsOverrides(t *testing.T) {
 		"nats_url":                    "nats://prod:4222",
 		"auth_url":                    "http://assets:5002/auth",
 		"auth_api_key":                "prod-key",
-		"nats_subject_presence":       "prod.mapexos.mqtt.presence.advisory",
+		"nats_subject_presence":       "prod.mapexos.presence.advisory",
 		"nats_subject_ingress_prefix": "prod.mapexos.mqtt.data",
 		"worker_pool_size":            "8",
 		"buffer_size":                 "20000",
@@ -47,7 +47,7 @@ func TestLoadConfig_AcceptsOverrides(t *testing.T) {
 	if cfg.NatsURL != "nats://prod:4222" {
 		t.Fatalf("nats_url = %q", cfg.NatsURL)
 	}
-	if cfg.SubjectPresence != "prod.mapexos.mqtt.presence.advisory" {
+	if cfg.SubjectPresence != "prod.mapexos.presence.advisory" {
 		t.Fatalf("presence subject = %q", cfg.SubjectPresence)
 	}
 	if cfg.SubjectIngressPrefix != "prod.mapexos.mqtt.data" {

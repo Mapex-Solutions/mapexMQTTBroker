@@ -7,7 +7,7 @@ import "time"
 // container boots with the dev stack working out of the box; operators in
 // other environments override via the conf file.
 const (
-	DefaultSubjectPresence         = "dev.mapexos.mqtt.presence.advisory"
+	DefaultSubjectPresence         = "dev.mapexos.presence.advisory"
 	DefaultSubjectIngressPrefix    = "dev.mapexos.mqtt.data"
 	DefaultWorkerPoolSize          = 4
 	DefaultBufferSize              = 10_000
@@ -16,4 +16,9 @@ const (
 	DefaultCacheL1TTL              = 30 * time.Minute
 	DefaultCacheL2Bucket           = "mapex-asset-auth"
 	DefaultFanoutInvalidateSubject = "mapexos.fanout.asset.invalidate"
+	DefaultSubjectOTAStatus        = "dev.mapexos.ota.status.advisory"
+	DefaultSubjectDownlink         = "dev.mapexos.mqtt.downlink"
+	DefaultStreamDownlink          = "DEV-MAPEXOS-MQTT-DOWNLINK"
+	DefaultDownlinkDurable         = "mqtt-broker-downlink"
+	DefaultDownlinkQueue           = "MQTT-BROKER-DOWNLINK-GROUP"
 )

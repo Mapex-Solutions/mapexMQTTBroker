@@ -11,7 +11,9 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/auth"
+	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/downlink"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/ingress"
+	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/otastatus"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/presence"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/modules/session"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/packages/config"
@@ -30,24 +32,31 @@ const ShutdownTimeout = 5 * time.Second
 type Options struct {
 	Config    config.Config
 	Publisher natsbus.NatsPublisher
-	NatsConn  *nats.Conn // optional — required for the fanout consumer; nil disables it
+	NatsConn  *nats.Conn // optional — required for the fanout + downlink consumers; nil disables them
 	Log       logging.Logger
+
+	// Deliverer publishes a payload to a broker-local MQTT topic (the cgo
+	// entry implements it with mosquitto_broker_publish). nil disables the
+	// downlink consumer — tests and non-plugin builds run without it.
+	Deliverer downlink.Deliverer
 }
 
 // App is the process-scope aggregate the cgo entry holds: one service per
 // bounded context plus the lifecycle handles the composition root owns and
 // tears down at cleanup.
 type App struct {
-	Auth     *auth.Service
-	Presence *presence.Service
-	Ingress  *ingress.Service
-	Session  *session.Service
+	Auth      *auth.Service
+	Presence  *presence.Service
+	Ingress   *ingress.Service
+	Session   *session.Service
+	OTAStatus *otastatus.Service
 
 	Log         logging.Logger
 	AuthTimeout time.Duration
 
-	async   *natsbus.AsyncPublisher
-	authMod *auth.Module
+	async       *natsbus.AsyncPublisher
+	authMod     *auth.Module
+	downlinkMod *downlink.Module
 }
 
 // Build constructs the App: it starts the async publisher, builds the auth
@@ -74,9 +83,10 @@ func Build(opts Options) (*App, error) {
 		AuthTimeout:      opts.Config.AuthTimeout,
 		CacheL1Path:      opts.Config.CacheL1Path,
 		CacheL1TTL:       opts.Config.CacheL1TTL,
-		CacheL2Endpoint:  opts.Config.CacheL2Endpoint,
-		CacheL2AccessKey: opts.Config.CacheL2AccessKey,
-		CacheL2SecretKey: opts.Config.CacheL2SecretKey,
+		CacheL2Endpoint:     opts.Config.CacheL2Endpoint,
+		CacheL2AccessKey:    opts.Config.CacheL2AccessKey,
+		CacheL2SecretKey:    opts.Config.CacheL2SecretKey,
+		CacheL2AuthIsNeeded: opts.Config.CacheL2AuthIsNeeded,
 		CacheL2Bucket:    opts.Config.CacheL2Bucket,
 		CacheL2UseSSL:    opts.Config.CacheL2UseSSL,
 		FanoutSubject:    opts.Config.FanoutInvalidateSubject,
@@ -91,10 +101,32 @@ func Build(opts Options) (*App, error) {
 		Presence:    presence.New(async, opts.Config.SubjectPresence, opts.Log),
 		Ingress:     ingress.New(async, opts.Config.SubjectIngressPrefix, opts.Log),
 		Session:     session.New(),
+		OTAStatus:   otastatus.New(async, opts.Config.SubjectOTAStatus, opts.Log),
 		Log:         opts.Log,
 		AuthTimeout: opts.Config.AuthTimeout,
 		async:       async,
 		authMod:     authMod,
+	}
+
+	// Downlink consumer — platform->device commands. Requires both the NATS
+	// connection (JetStream durable) and the cgo Deliverer; absent either,
+	// the plugin runs uplink-only (tests, partial deployments).
+	if opts.NatsConn != nil && opts.Deliverer != nil {
+		downlinkMod, err := downlink.Build(downlink.Config{
+			Conn:      opts.NatsConn,
+			Deliverer: opts.Deliverer,
+			Subject:   opts.Config.SubjectDownlink,
+			Stream:    opts.Config.StreamDownlink,
+			Durable:   opts.Config.DownlinkDurable,
+			Queue:     opts.Config.DownlinkQueue,
+			Log:       opts.Log,
+		})
+		if err != nil {
+			authMod.Stop()
+			_ = async.Drain(ShutdownTimeout)
+			return nil, err
+		}
+		app.downlinkMod = downlinkMod
 	}
 
 	opts.Log.Info("[MODULE:Broker] initialized: presence=%s ingress_prefix=%s auth_url=%s l1=%s l2=%s",
@@ -106,6 +138,7 @@ func Build(opts Options) (*App, error) {
 // Shutdown tears down the owned lifecycle resources: the auth module (fanout +
 // cache store) and the async publisher. Idempotent at the module level.
 func (a *App) Shutdown() {
+	a.downlinkMod.Shutdown()
 	a.authMod.Stop()
 	_ = a.async.Drain(ShutdownTimeout)
 }

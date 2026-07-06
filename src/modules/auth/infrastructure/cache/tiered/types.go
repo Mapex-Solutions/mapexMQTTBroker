@@ -27,6 +27,11 @@ type TieredAuthStoreConfig struct {
 	L2Bucket    string
 	L2UseSSL    bool
 
+	// L2AuthIsNeeded selects the credential provider. When true, the L2 client
+	// uses the static L2AccessKey/L2SecretKey; when false, it uses the ambient
+	// IAM credential chain (EC2/ECS instance profile) and the keys are ignored.
+	L2AuthIsNeeded bool
+
 	// L3Client falls back to the assets service HTTP endpoint when L1 and
 	// L2 miss. Required — without a fallback, a fresh deploy with empty L1
 	// + missing L2 entry would deny every CONNECT.

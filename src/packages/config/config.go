@@ -56,12 +56,19 @@ func Load(opts map[string]string) (Config, error) {
 		BufferSize:              intOrDefault(opts, "buffer_size", DefaultBufferSize),
 		CacheL1Path:             stringOrDefault(opts, "cache_l1_path", DefaultCacheL1Path),
 		CacheL1TTL:              cacheL1TTL,
-		CacheL2Endpoint:         strings.TrimSpace(opts["cache_l2_endpoint"]),
-		CacheL2AccessKey:        strings.TrimSpace(opts["cache_l2_access_key"]),
-		CacheL2SecretKey:        strings.TrimSpace(opts["cache_l2_secret_key"]),
+		CacheL2Endpoint:         strings.TrimSpace(opts["object_store_endpoint"]),
+		CacheL2AccessKey:        strings.TrimSpace(opts["object_store_access_key"]),
+		CacheL2SecretKey:        strings.TrimSpace(opts["object_store_secret_key"]),
 		CacheL2Bucket:           DefaultCacheL2Bucket, // fixed by platform contract — see Config comment.
-		CacheL2UseSSL:           strings.EqualFold(strings.TrimSpace(opts["cache_l2_use_ssl"]), "true"),
+		CacheL2UseSSL:           strings.EqualFold(strings.TrimSpace(opts["object_store_use_ssl"]), "true"),
+		// Auth needed unless explicitly disabled (then the client uses ambient IAM).
+		CacheL2AuthIsNeeded: !strings.EqualFold(strings.TrimSpace(opts["object_store_auth_is_needed"]), "false"),
 		FanoutInvalidateSubject: stringOrDefault(opts, "fanout_invalidate_subject", DefaultFanoutInvalidateSubject),
+		SubjectOTAStatus:        stringOrDefault(opts, "nats_subject_ota_status", DefaultSubjectOTAStatus),
+		SubjectDownlink:         stringOrDefault(opts, "nats_subject_downlink", DefaultSubjectDownlink),
+		StreamDownlink:          stringOrDefault(opts, "nats_stream_downlink", DefaultStreamDownlink),
+		DownlinkDurable:         stringOrDefault(opts, "nats_downlink_durable", DefaultDownlinkDurable),
+		DownlinkQueue:           stringOrDefault(opts, "nats_downlink_queue", DefaultDownlinkQueue),
 	}
 	return cfg, nil
 }
