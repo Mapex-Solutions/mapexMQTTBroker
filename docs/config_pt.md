@@ -1,30 +1,62 @@
 # Configuração
 
 Como o operador configura o container `mapex-broker-mqtt` em
-tempo de execução. Todos os parâmetros são expostos como **variáveis de ambiente** —
-`/entrypoint.sh` renderiza `mosquitto.conf.template` via `envsubst`
-quando o container inicia e falha imediatamente se uma variável
-obrigatória estiver ausente.
+tempo de execução. Todos os parâmetros são expostos como **variáveis de ambiente**.
+O plugin `mapex-broker` as lê diretamente pelo fluxo compartilhado
+`mapexGoKit/config` — o mesmo mecanismo `InitConfig` / `ConfigDefinition`
+usado por todo serviço Go do mapexOS. O `/entrypoint.sh` renderiza apenas
+o bloco de listener nativo do mosquitto (`mosquitto.conf.template` via
+`envsubst`); as configurações de negócio não são mais escritas no
+`mosquitto.conf`.
 
-## Variáveis obrigatórias
+## O guard de produção (`GO_ENV`)
 
-O container se recusa a iniciar caso alguma das quatro não esteja definida.
+Toda credencial e a `NATS_URL` (que carrega `user:password` inline) tem um
+valor padrão amigável para dev, para que um container básico inicie contra o
+stack local. Esses padrões nunca devem chegar à produção. O `InitConfig`
+executa o guard de padrões sensíveis compartilhado na inicialização:
 
-| Variable | Purpose | Example |
+- `GO_ENV=dev` (ou ausente): o plugin inicia; uma linha `[SECURITY WARNING]`
+  nomeia qualquer chave sensível ainda usando seu padrão de dev.
+- `GO_ENV` com qualquer valor não-dev (`staging`, `prod`, …): o plugin
+  **se recusa a iniciar** se alguma chave sensível ainda estiver no padrão
+  de dev, registrando `[SECURITY]` e saindo com código diferente de zero.
+
+As chaves sensíveis são `NATS_URL`, `INTERNAL_API_KEY`,
+`OBJECT_STORE_ACCESS_KEY` e `OBJECT_STORE_SECRET_KEY`. Defina-as com valores
+reais em todo deployment não-dev.
+
+## Variáveis principais
+
+Possuem padrões de dev; o entrypoint não falha mais rapidamente quando estão
+ausentes (o guard acima é o ponto de aplicação em não-dev).
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `INTERNAL_API_KEY` | Shared secret on the `X-API-Key` header for the auth callout. MUST equal `internal_api_key` configured in the assets MS. | `f3b1...` (high-entropy random string) |
-| `NATS_URL` | NATS server URL the plugin publishes to. The container exits if the initial dial fails. | `nats://nats-core:4222` |
-| `ASSETS_HOST` | Hostname of the assets MS internal listener. | `assets` (compose service name) |
-| `ASSETS_PORT` | Port of the assets MS internal listener. | `5002` |
-
-`INTERNAL_API_KEY` e `NATS_URL` DEVEM estar definidas ou o entrypoint falha
-rapidamente na inicialização. `ASSETS_HOST` / `ASSETS_PORT` possuem valores padrão (`assets` /
-`5002`), mas devem ser tornados explícitos por ambiente.
+| `GO_ENV` | `dev` | Seleciona warn (dev) vs abort (não-dev) para o guard de padrões sensíveis. |
+| `INTERNAL_API_KEY` | dev key | Segredo compartilhado no header `X-API-Key` do auth callout. DEVE ser igual a `internal_api_key` no assets MS. Sensível. |
+| `NATS_URL` | `nats://service:service_secret@localhost:4222` | URL do servidor NATS onde o plugin publica (credenciais inline). Sensível. |
+| `ASSETS_HOST` | `assets` | Hostname do listener interno do assets MS. `AUTH_URL` é derivado como `http://{host}:{port}/internal/asset_auth`. |
+| `ASSETS_PORT` | `5002` | Porta do listener interno do assets MS. |
 
 ## Variáveis opcionais
 
-Os valores padrão abaixo são aplicados pelo `entrypoint.sh` quando a variável
-está ausente ou vazia.
+Os valores padrão abaixo são aplicados pela lista `ConfigDefinition` do plugin
+quando a variável está ausente (as vars nativas do mosquitto são default no
+`entrypoint.sh`).
+
+### Object store (TieredCache L2)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OBJECT_STORE_ENDPOINT` | `` (vazio) | Endpoint MinIO/S3 do cache L2 de auth-projection. Vazio desabilita o L2 (plugin usa L1 + L3). |
+| `OBJECT_STORE_ACCESS_KEY` | `svc-broker` | Usuário escopado do object store. Sensível — sobrescreva em não-dev. |
+| `OBJECT_STORE_SECRET_KEY` | `svc-broker-secret-change-me` | Segredo do usuário escopado. Sensível — sobrescreva em não-dev. |
+| `OBJECT_STORE_USE_SSL` | `false` | TLS para o object store. |
+| `OBJECT_STORE_AUTH_IS_NEEDED` | `true` | `true` = chaves estáticas; `false` = IAM ambiente (chaves ignoradas). |
+
+O nome do bucket L2 é fixado pelo contrato da plataforma
+(`mapex-asset-auth`) e não é configurável pelo operador.
 
 ### Listener
 
@@ -35,10 +67,10 @@ está ausente ou vazia.
 
 ### NATS subjects
 
-O plugin é agnóstico em relação ao ambiente — ele não lê `GO_ENV`.
-Os operadores passam nomes de subjects completos com prefixo de ambiente, para que os
-deployments de `dev`, `staging` e `prod` possam compartilhar um cluster NATS
-sem colisões.
+O plugin lê `GO_ENV` apenas para acionar o guard de padrões sensíveis — ele
+NÃO adiciona prefixo de ambiente aos subjects. Os operadores ainda passam
+nomes de subjects completos com prefixo de ambiente, para que os deployments
+de `dev`, `staging` e `prod` possam compartilhar um cluster NATS sem colisões.
 
 | Variable | Default | Purpose |
 |---|---|---|

@@ -16,6 +16,7 @@ replace github.com/Mapex-Solutions/mapexGoKit/contracts => ../mapexGoKit/contrac
 
 require (
 	github.com/DataDog/zstd v1.4.5 // indirect
+	github.com/Mapex-Solutions/mapexGoKit/config v0.0.0
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.11.3 // indirect
@@ -57,3 +58,5 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
+
+replace github.com/Mapex-Solutions/mapexGoKit/config => ../mapexGoKit/config

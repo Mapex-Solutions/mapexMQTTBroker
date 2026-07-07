@@ -1,25 +1,18 @@
 ###############################################################################
 # MapexOS Mosquitto Broker — config template
 #
-# Rendered by /entrypoint.sh on container startup via envsubst. Every
-# ${VAR} below is replaced with the matching environment variable;
-# the rendered file is written to /mosquitto/config/mosquitto.conf and
-# the broker is launched against it.
+# Rendered by /entrypoint.sh on container startup via envsubst. Only the
+# mosquitto-native listener variables below are substituted; the rendered file
+# is written to /mosquitto/config/mosquitto.conf and the broker is launched
+# against it.
 #
-# Operator MUST set:
-#   - INTERNAL_API_KEY               assets MS internal API key
-#   - NATS_URL                       e.g. nats://nats:4222
-#   - ASSETS_HOST                    assets MS hostname
-#   - ASSETS_PORT                    assets MS port
+# The mapex-broker plugin reads all of its business settings (auth callout,
+# NATS, TieredStore L1/L2, subjects, credentials) from the environment through
+# the shared mapexGoKit config flow — see docs/config.md — not from this file.
 #
 # Operator MAY override (defaults applied by the entrypoint):
 #   - MQTT_LISTENER_PORT             1883
 #   - MQTT_MAX_CONNECTIONS           -1 (unlimited)
-#   - NATS_SUBJECT_PRESENCE          dev.mapexos.presence.advisory
-#   - NATS_SUBJECT_INGRESS_PREFIX    dev.mapexos.mqtt.data
-#   - AUTH_TIMEOUT_SECONDS           5
-#   - PLUGIN_WORKER_POOL_SIZE        4
-#   - PLUGIN_BUFFER_SIZE             10000
 ###############################################################################
 
 listener ${MQTT_LISTENER_PORT}
@@ -48,23 +41,8 @@ max_queued_messages 1000
 # Ingress: every authorized PUBLISH forwarded to NATS with per-device
 #   subject {prefix}.{orgId}.{assetUUID}.
 ###############################################################################
+# The plugin reads all of its settings (auth callout, NATS, TieredStore
+# L1/L2, subjects) from the environment through the shared mapexGoKit config
+# flow — not from plugin_opt_* directives. The container env carries those
+# values; see docs/config.md and the entrypoint.
 plugin /usr/lib/mosquitto/mapex-broker.so
-
-plugin_opt_auth_url      http://${ASSETS_HOST}:${ASSETS_PORT}/internal/asset_auth
-plugin_opt_auth_api_key  ${INTERNAL_API_KEY}
-plugin_opt_auth_timeout_seconds ${AUTH_TIMEOUT_SECONDS}
-
-plugin_opt_nats_url                    ${NATS_URL}
-plugin_opt_nats_subject_presence       ${NATS_SUBJECT_PRESENCE}
-plugin_opt_nats_subject_ingress_prefix ${NATS_SUBJECT_INGRESS_PREFIX}
-
-plugin_opt_worker_pool_size       ${PLUGIN_WORKER_POOL_SIZE}
-plugin_opt_buffer_size            ${PLUGIN_BUFFER_SIZE}
-
-# TieredStore L1 (Pebble on NVMe) + FANOUT consumer subject. The
-# L2 (MinIO) plugin_opts are appended by the entrypoint only when
-# CACHE_L2_ENDPOINT is set — Mosquitto 2.0.x rejects empty
-# plugin_opt values, so we cannot leave placeholders here.
-plugin_opt_cache_l1_path             ${CACHE_L1_PATH}
-plugin_opt_cache_l1_ttl_minutes      ${CACHE_L1_TTL_MINUTES}
-plugin_opt_fanout_invalidate_subject ${FANOUT_INVALIDATE_SUBJECT}

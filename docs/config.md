@@ -1,30 +1,62 @@
 # Configuration
 
 How the operator configures the `mapex-broker-mqtt` container at
-runtime. All knobs are exposed as **environment variables** —
-`/entrypoint.sh` renders `mosquitto.conf.template` via `envsubst`
-when the container starts and immediately fails if a required
-variable is missing.
+runtime. All knobs are exposed as **environment variables**. The
+`mapex-broker` plugin reads them directly through the shared
+`mapexGoKit/config` flow — the same `InitConfig` / `ConfigDefinition`
+mechanism every mapexOS Go service uses. `/entrypoint.sh` only renders
+the mosquitto-native listener block (`mosquitto.conf.template` via
+`envsubst`); business settings are no longer written into
+`mosquitto.conf`.
 
-## Required variables
+## The production guard (`GO_ENV`)
 
-The container refuses to start unless all four are set.
+Every credential and the `NATS_URL` (which carries inline
+`user:password`) has a dev-friendly default so a bare container boots
+against the local stack. Those defaults must never reach production.
+`InitConfig` runs the shared sensitive-default guard at startup:
 
-| Variable | Purpose | Example |
+- `GO_ENV=dev` (or unset): the plugin boots; a `[SECURITY WARNING]`
+  log line names any sensitive key still using its dev default.
+- `GO_ENV` any non-dev value (`staging`, `prod`, …): the plugin
+  **refuses to start** if any sensitive key still holds its dev
+  default, logging `[SECURITY]` and exiting non-zero.
+
+The sensitive keys are `NATS_URL`, `INTERNAL_API_KEY`,
+`OBJECT_STORE_ACCESS_KEY`, and `OBJECT_STORE_SECRET_KEY`. Set them to
+real values in every non-dev deployment.
+
+## Core variables
+
+These have dev defaults; the entrypoint no longer fails fast when they
+are unset (the guard above is the enforcement point in non-dev).
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `INTERNAL_API_KEY` | Shared secret on the `X-API-Key` header for the auth callout. MUST equal `internal_api_key` configured in the assets MS. | `f3b1...` (high-entropy random string) |
-| `NATS_URL` | NATS server URL the plugin publishes to. The container exits if the initial dial fails. | `nats://nats-core:4222` |
-| `ASSETS_HOST` | Hostname of the assets MS internal listener. | `assets` (compose service name) |
-| `ASSETS_PORT` | Port of the assets MS internal listener. | `5002` |
-
-`INTERNAL_API_KEY` and `NATS_URL` MUST be set or the entrypoint fails
-fast at boot. `ASSETS_HOST` / `ASSETS_PORT` have defaults (`assets` /
-`5002`) but should be made explicit per environment.
+| `GO_ENV` | `dev` | Selects warn (dev) vs abort (non-dev) for the sensitive-default guard. |
+| `INTERNAL_API_KEY` | dev key | Shared secret on the `X-API-Key` header for the auth callout. MUST equal `internal_api_key` in the assets MS. Sensitive. |
+| `NATS_URL` | `nats://service:service_secret@localhost:4222` | NATS server URL the plugin publishes to (credentials inline). Sensitive. |
+| `ASSETS_HOST` | `assets` | Hostname of the assets MS internal listener. `AUTH_URL` is derived as `http://{host}:{port}/internal/asset_auth`. |
+| `ASSETS_PORT` | `5002` | Port of the assets MS internal listener. |
 
 ## Optional variables
 
-Defaults below are applied by `entrypoint.sh` when the variable is
-absent or empty.
+Defaults below are applied by the plugin's `ConfigDefinition` list
+when the variable is absent (mosquitto-native listener vars are
+defaulted by `entrypoint.sh`).
+
+### Object store (TieredCache L2)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OBJECT_STORE_ENDPOINT` | `` (empty) | MinIO/S3 endpoint for the L2 auth-projection cache. Empty disables L2 (plugin falls back to L1 + L3). |
+| `OBJECT_STORE_ACCESS_KEY` | `svc-broker` | Scoped object-store user. Sensitive — override in non-dev. |
+| `OBJECT_STORE_SECRET_KEY` | `svc-broker-secret-change-me` | Secret for the scoped user. Sensitive — override in non-dev. |
+| `OBJECT_STORE_USE_SSL` | `false` | TLS to the object store. |
+| `OBJECT_STORE_AUTH_IS_NEEDED` | `true` | `true` = static keys; `false` = ambient IAM (keys ignored). |
+
+The L2 bucket name is fixed by the platform contract
+(`mapex-asset-auth`) and is not operator-configurable.
 
 ### Listener
 
@@ -35,9 +67,10 @@ absent or empty.
 
 ### NATS subjects
 
-The plugin is environment-agnostic — it doesn't read `GO_ENV`.
-Operators pass full env-prefixed subject names so `dev`, `staging`,
-and `prod` deployments can share a NATS cluster without collisions.
+The plugin reads `GO_ENV` only to drive the sensitive-default guard —
+it does NOT env-prefix subjects itself. Operators still pass full
+env-prefixed subject names so `dev`, `staging`, and `prod` deployments
+can share a NATS cluster without collisions.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -126,11 +159,11 @@ INFO  [PLUGIN:Mosquitto] PluginRuntime initialized: presence=... ingress_prefix=
 INFO  [PLUGIN:Mosquitto] plugin_init: ready (4 callbacks registered)
 ```
 
-If any required variable is missing, the entrypoint exits before
-mosquitto starts:
+In a non-dev `GO_ENV`, if a sensitive credential is still at its dev
+default the plugin guard refuses to start:
 
 ```
-/entrypoint.sh: line 26: INTERNAL_API_KEY: INTERNAL_API_KEY is required
+[SECURITY] refusing to start in GO_ENV=prod — sensitive env vars using DEV defaults: NATS_URL, INTERNAL_API_KEY. Set them to production values before deploying.
 ```
 
 ## Production reference (docker-compose)
@@ -330,7 +363,9 @@ publish/subscribe with known credentials.
 
 ## Override checklist before deploying to a new environment
 
+- [ ] `GO_ENV` set to the target environment (`staging`, `prod`) so the sensitive-default guard is armed
 - [ ] `INTERNAL_API_KEY` matches the assets MS configured key
+- [ ] `NATS_URL`, `OBJECT_STORE_ACCESS_KEY`, `OBJECT_STORE_SECRET_KEY` overridden away from their dev defaults
 - [ ] `NATS_URL` resolves and is reachable from the broker network
 - [ ] `ASSETS_HOST` / `ASSETS_PORT` resolve and are reachable
 - [ ] `NATS_SUBJECT_PRESENCE` env-prefix matches the rest of the platform (`prod`, `staging`, `dev`)

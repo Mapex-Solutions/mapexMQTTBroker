@@ -155,11 +155,14 @@ func mosquitto_plugin_init(
 	optCount C.int,
 ) C.int {
 	_ = userdata
+	// The plugin now reads its configuration from the environment via the
+	// shared mapexGoKit config flow, so Mosquitto's plugin_opt array is no
+	// longer consumed for business settings.
+	_, _ = rawOpts, optCount
 	log := logging.New(nil, logging.LogInfo)
 	log.Info("[MODULE:Broker] plugin_init: starting")
 
-	opts := readOpts(rawOpts, optCount)
-	cfg, err := config.Load(opts)
+	cfg, err := config.Load()
 	if err != nil {
 		log.Error("[MODULE:Broker] plugin_init: config load failed err=%v", err)
 		return C.MOSQ_ERR_UNKNOWN
@@ -251,26 +254,6 @@ func registerCallbacks(id *C.struct_mosquitto_plugin_id_t) C.int {
 		}
 	}
 	return C.MOSQ_ERR_SUCCESS
-}
-
-// readOpts converts the C `struct mosquitto_opt[]` array Mosquitto
-// passes into a plain Go map. Both key and value are copied via
-// C.GoString so the Go map outlives whatever broker-owned memory
-// backed them.
-func readOpts(rawOpts *C.struct_mosquitto_opt, count C.int) map[string]string {
-	opts := make(map[string]string, int(count))
-	if rawOpts == nil || count == 0 {
-		return opts
-	}
-	size := unsafe.Sizeof(*rawOpts)
-	base := uintptr(unsafe.Pointer(rawOpts))
-	for i := C.int(0); i < count; i++ {
-		opt := (*C.struct_mosquitto_opt)(unsafe.Pointer(base + uintptr(i)*size))
-		key := C.GoString(opt.key)
-		val := C.GoString(opt.value)
-		opts[key] = val
-	}
-	return opts
 }
 
 //export goOnBasicAuth
