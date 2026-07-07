@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	gokitconfig "github.com/Mapex-Solutions/mapexGoKit/config"
 	"github.com/Mapex-Solutions/mapexMQTTBroket/src/packages/config"
 )
 
@@ -36,12 +37,14 @@ func (l *captureLogger) Error(string, ...any) { l.n.Add(1) }
 
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
-	cfg, err := config.Load(map[string]string{
-		"nats_url":      "nats://nats:4222",
-		"auth_url":      "http://assets:5002/auth",
-		"auth_api_key":  "test",
-		"cache_l1_path": t.TempDir(),
-	})
+	gokitconfig.ResetSingletonForTest()
+	t.Setenv("GO_ENV", "dev")
+	t.Setenv("NATS_URL", "nats://nats:4222")
+	t.Setenv("ASSETS_HOST", "assets")
+	t.Setenv("ASSETS_PORT", "5002")
+	t.Setenv("INTERNAL_API_KEY", "test")
+	t.Setenv("CACHE_L1_PATH", t.TempDir())
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

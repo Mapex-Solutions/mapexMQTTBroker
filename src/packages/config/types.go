@@ -2,10 +2,10 @@ package config
 
 import "time"
 
-// Config aggregates the runtime parameters the plugin reads from
-// `plugin_opt_*` directives in mosquitto.conf. All fields are immutable
-// after Load; the plugin re-reads only on broker restart (Mosquitto's
-// SIGHUP cycle does NOT re-fire mosquitto_plugin_init).
+// Config aggregates the runtime parameters the plugin reads from the
+// environment through the shared mapexGoKit config flow (see Load). All fields
+// are immutable after Load; the plugin re-reads only on broker restart
+// (Mosquitto's SIGHUP cycle does NOT re-fire mosquitto_plugin_init).
 type Config struct {
 	// NatsURL is the URL the plugin connects to. Required.
 	// Example: "nats://nats:4222".

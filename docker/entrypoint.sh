@@ -2,13 +2,15 @@
 ###############################################################################
 # entrypoint.sh — Mapex MQTT Broker container startup
 #
-# Renders /mosquitto/config/mosquitto.conf.template into mosquitto.conf
-# by substituting environment variables, optionally appends a TLS
-# listener block, then execs mosquitto. Defaults are applied here so
-# a bare-bones run with only INTERNAL_API_KEY + NATS_URL boots
-# correctly on the plaintext listener.
+# Renders /mosquitto/config/mosquitto.conf.template into mosquitto.conf by
+# substituting the mosquitto-native listener variables, optionally appends a
+# TLS listener block, then execs mosquitto. Business config (credentials, NATS,
+# subjects, object store) is read by the mapex-broker plugin directly from the
+# environment via the shared mapexGoKit config flow — it is not rendered into
+# mosquitto.conf. The plugin owns those defaults and the production guard.
 #
-# Required env:
+# Env (defaults applied by the plugin unless noted):
+#   GO_ENV                         dev — non-dev enforces the sensitive guard
 #   INTERNAL_API_KEY               internal API key the assets MS expects
 #   NATS_URL                       NATS server URL (e.g. nats://nats:4222)
 #
@@ -34,9 +36,15 @@
 ###############################################################################
 set -eu
 
-# Required vars — fail fast if missing.
-: "${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}"
-: "${NATS_URL:?NATS_URL is required}"
+# Business config (credentials, NATS, subjects) is read by the plugin from the
+# environment through the shared mapexGoKit config flow, which owns the dev
+# defaults and the sensitive-default production guard. The entrypoint no longer
+# fails fast on these — a non-dev GO_ENV that leaves a credential at its dev
+# default is refused by the plugin guard at startup instead. GO_ENV selects
+# dev (warn) vs non-dev (abort) behavior for that guard.
+export GO_ENV="${GO_ENV:-dev}"
+export INTERNAL_API_KEY="${INTERNAL_API_KEY:-5230c2e2-e245-468d-89e8-94154cf520d0}"
+export NATS_URL="${NATS_URL:-nats://service:service_secret@localhost:4222}"
 
 # Plain-listener defaults.
 export MQTT_LISTENER_PORT="${MQTT_LISTENER_PORT:-1883}"
@@ -108,28 +116,12 @@ if [ ! -f "$TEMPLATE" ]; then
     exit 1
 fi
 
-# envsubst limited to the variables we manage so unrelated $VAR strings
-# in topic/subject defaults don't get accidentally expanded.
+# envsubst limited to the mosquitto-native variables the template still
+# references. Business settings are read by the plugin from the environment,
+# not rendered into mosquitto.conf, so they are no longer substituted here.
 envsubst '
     ${MQTT_LISTENER_PORT}
     ${MQTT_MAX_CONNECTIONS}
-    ${ASSETS_HOST}
-    ${ASSETS_PORT}
-    ${INTERNAL_API_KEY}
-    ${NATS_URL}
-    ${NATS_SUBJECT_PRESENCE}
-    ${NATS_SUBJECT_INGRESS_PREFIX}
-    ${AUTH_TIMEOUT_SECONDS}
-    ${PLUGIN_WORKER_POOL_SIZE}
-    ${PLUGIN_BUFFER_SIZE}
-    ${CACHE_L1_PATH}
-    ${CACHE_L1_TTL_MINUTES}
-    ${OBJECT_STORE_ENDPOINT}
-    ${OBJECT_STORE_ACCESS_KEY}
-    ${OBJECT_STORE_SECRET_KEY}
-    ${OBJECT_STORE_USE_SSL}
-    ${OBJECT_STORE_AUTH_IS_NEEDED}
-    ${FANOUT_INVALIDATE_SUBJECT}
 ' < "$TEMPLATE" > "$RENDERED"
 
 # Append the TLS listener block when enabled. Doing this in the
@@ -175,21 +167,11 @@ if [ "$TLS_ENABLED" = "true" ]; then
     echo "[ENTRYPOINT] TLS listener appended: port=${MQTT_TLS_LISTENER_PORT} cert=${TLS_CERT_FILE} mtls=$([ -n "$TLS_CA_FILE" ] && echo true || echo false)"
 fi
 
-# Conditionally append the L2 (MinIO) plugin_opts. Mosquitto 2.0.x
-# rejects empty plugin_opt values, so the L2 stanza only lands when
-# the operator set the endpoint.
-if [ -n "$OBJECT_STORE_ENDPOINT" ]; then
-    {
-        echo ""
-        echo "# TieredStore L2 (object store) — appended by entrypoint when OBJECT_STORE_ENDPOINT is set."
-        echo "# Bucket name is fixed by the platform contract; operators only configure endpoint + credentials."
-        echo "plugin_opt_object_store_endpoint         ${OBJECT_STORE_ENDPOINT}"
-        [ -n "$OBJECT_STORE_ACCESS_KEY" ] && echo "plugin_opt_object_store_access_key       ${OBJECT_STORE_ACCESS_KEY}"
-        [ -n "$OBJECT_STORE_SECRET_KEY" ] && echo "plugin_opt_object_store_secret_key       ${OBJECT_STORE_SECRET_KEY}"
-        echo "plugin_opt_object_store_use_ssl          ${OBJECT_STORE_USE_SSL}"
-        echo "plugin_opt_object_store_auth_is_needed   ${OBJECT_STORE_AUTH_IS_NEEDED}"
-    } >> "$RENDERED"
-    echo "[ENTRYPOINT] L2 object store appended: endpoint=${OBJECT_STORE_ENDPOINT}"
+# TieredStore L2 (object store) is configured entirely from the environment
+# (OBJECT_STORE_*) read by the plugin; nothing is rendered into mosquitto.conf.
+# An empty OBJECT_STORE_ENDPOINT disables L2 (plugin falls back to L1 + L3).
+if [ -n "${OBJECT_STORE_ENDPOINT:-}" ]; then
+    echo "[ENTRYPOINT] L2 object store enabled: endpoint=${OBJECT_STORE_ENDPOINT}"
 else
     echo "[ENTRYPOINT] L2 object store disabled (OBJECT_STORE_ENDPOINT empty); plugin uses L1 + L3 only"
 fi
