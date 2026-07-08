@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 ###############################################################################
-# mapexos/mapex-broker-mqtt — production-ready Mapex MQTT Broker image
+# thiagoanselmo/mapex-broker-mqtt — production-ready Mapex MQTT Broker image
 #
 # Bundles Mosquitto v2 + the in-house mapex-broker plugin (auth + ACL +
 # presence + ingress, all in one .so). The envsubst entrypoint lets a
@@ -13,7 +13,7 @@
 #                         the .so + envsubst entrypoint + config template
 #
 # Build (from repo root):
-#   docker build -f docker/Dockerfile -t mapexos/mapex-broker-mqtt:dev .
+#   docker build -f docker/Dockerfile -t thiagoanselmo/mapex-broker-mqtt:dev .
 #
 # Or via the Makefile:
 #   make build VERSION=2026.05.08
@@ -39,15 +39,18 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-COPY go.mod go.sum ./
-RUN go mod download
-COPY src/ ./src/
+# The broker vendors all of its dependencies (mapexGoKit contracts + config and
+# the infra drivers), so the build is fully offline with -mod=vendor and needs
+# no module download or access to the sibling mapexGoKit checkout. Regenerate
+# the vendor tree with `go mod vendor` before building (the Makefile does this).
+COPY . .
 
 # `cgo_mosquitto_plugin` build tag activates the cgo entry point.
 # GOWORK=off ignores any go.work in the build context so the plugin
 # builds against its standalone go.mod.
 RUN GOWORK=off CGO_ENABLED=1 \
     go build \
+        -mod=vendor \
         -tags=cgo_mosquitto_plugin \
         -buildmode=c-shared \
         -o /out/mapex-broker.so \

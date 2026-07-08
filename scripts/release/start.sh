@@ -32,7 +32,7 @@
 #   --no-cache           Force rebuild without Docker layer cache
 #   --multiarch          Build linux/amd64 + linux/arm64 via buildx
 #                        (buildx must be initialized; we don't bootstrap it)
-#   --registry <url>     Override registry (default: docker.io/mapexos)
+#   --registry <url>     Override registry (default: docker.io/thiagoanselmo)
 #                        Equivalent to setting DOCKER_REGISTRY env var
 #   --image <name>       Override image name (default: mapex-broker-mqtt)
 #   --inspect            After build, run `docker inspect` and show labels
@@ -47,7 +47,7 @@
 #   ./scripts/release/start.sh --list
 #
 # Environment overrides:
-#   DOCKER_REGISTRY      default: docker.io/mapexos
+#   DOCKER_REGISTRY      default: docker.io/thiagoanselmo
 #   DOCKER_IMAGE_NAME    default: mapex-broker-mqtt
 #   DOCKERFILE           default: docker/Dockerfile (relative to repo root)
 #
@@ -65,7 +65,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 # Configurable knobs (env overrides land here; never bake secrets).
 # -----------------------------------------------------------------------------
-DOCKER_REGISTRY="${DOCKER_REGISTRY:-docker.io/mapexos}"
+DOCKER_REGISTRY="${DOCKER_REGISTRY:-docker.io/thiagoanselmo}"
 DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-mapex-broker-mqtt}"
 DOCKERFILE="${DOCKERFILE:-docker/Dockerfile}"
 
@@ -109,7 +109,7 @@ Options:
   -h, --help           Show this help
 
 Environment overrides:
-  DOCKER_REGISTRY      default: docker.io/mapexos
+  DOCKER_REGISTRY      default: docker.io/thiagoanselmo
   DOCKER_IMAGE_NAME    default: mapex-broker-mqtt
   DOCKERFILE           default: docker/Dockerfile
 

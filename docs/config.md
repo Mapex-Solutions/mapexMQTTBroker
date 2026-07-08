@@ -143,7 +143,7 @@ docker run --rm \
   -e ASSETS_HOST=assets \
   -e ASSETS_PORT=5002 \
   --network mapex-net \
-  docker.io/mapexos/mapex-broker-mqtt:dev
+  docker.io/thiagoanselmo/mapex-broker-mqtt:dev
 ```
 
 Everything else falls back to defaults. The boot sequence prints the
@@ -171,7 +171,7 @@ default the plugin guard refuses to start:
 ```yaml
 services:
   mapex-broker-mqtt:
-    image: docker.io/mapexos/mapex-broker-mqtt:${MAPEX_BROKER_VERSION:-2026.05.08}
+    image: docker.io/thiagoanselmo/mapex-broker-mqtt:${MAPEX_BROKER_VERSION:-2026.05.08}
     container_name: mapex-broker-mqtt
     ports:
       - "1883:1883"
@@ -230,7 +230,7 @@ Mount your cert + key into `/mosquitto/certs/` and flip the toggle:
 ```yaml
 services:
   mapex-broker-mqtt:
-    image: docker.io/mapexos/mapex-broker-mqtt:dev
+    image: docker.io/thiagoanselmo/mapex-broker-mqtt:dev
     ports:
       - "1883:1883"        # plaintext (internal/dev only)
       - "8883:8883"        # TLS (public devices)

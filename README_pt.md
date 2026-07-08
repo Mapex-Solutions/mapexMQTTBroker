@@ -4,7 +4,7 @@
 > [MapexOS](https://github.com/Mapex-Solutions/mapexOS) — Eclipse
 > Mosquitto v2 + um plugin próprio que lida com **auth**, **ACL**,
 > **presença** e **ingresso** em um único binário Go. Distribuído
-> como imagem Docker pronta para uso (`mapexos/mapex-broker-mqtt`).
+> como imagem Docker pronta para uso (`thiagoanselmo/mapex-broker-mqtt`).
 
 ### Sobre o MapexOS
 
@@ -90,7 +90,7 @@ Este broker é infraestrutura compartilhada consumida por todo deploy
 MapexOS. Ter seu próprio repositório permite:
 
 - Versionar + taguear independentemente dos repositórios de serviço.
-- Publicar em um Docker registry (`mapexos/mapex-broker-mqtt:<tag>`)
+- Publicar em um Docker registry (`thiagoanselmo/mapex-broker-mqtt:<tag>`)
   para que operadores **apenas puxem**, sem precisar buildar.
 - Ter seu próprio ciclo de CI (build → test → push) sem acoplamento
   aos pipelines goKit / mapexOS.
@@ -112,7 +112,7 @@ MapexOS. Ter seu próprio repositório permite:
 ├── config/
 │   └── mosquitto.conf.template   renderizado pelo entrypoint.sh no start do container
 ├── docker/
-│   ├── Dockerfile         builder multi-stage → mapexos/mapex-broker-mqtt
+│   ├── Dockerfile         builder multi-stage → thiagoanselmo/mapex-broker-mqtt
 │   └── entrypoint.sh      envsubst + validação + exec mosquitto
 ├── scripts/
 │   └── release/start.sh   workflow de build + tag + push
@@ -138,7 +138,7 @@ de import importam:
 # docker-compose.yml
 services:
   mapex-broker-mqtt:
-    image: docker.io/mapexos/mapex-broker-mqtt:dev
+    image: docker.io/thiagoanselmo/mapex-broker-mqtt:dev
     ports:
       - "1883:1883"
     environment:
@@ -181,7 +181,7 @@ caminho fácil é o Dockerfile, que os instala no estágio builder:
 make build VERSION=dev
 ```
 
-Isso produz `docker.io/mapexos/mapex-broker-mqtt:dev` pronto para
+Isso produz `docker.io/thiagoanselmo/mapex-broker-mqtt:dev` pronto para
 rodar. Sobrescreva `REGISTRY` e `VERSION` para publicar:
 
 ```bash

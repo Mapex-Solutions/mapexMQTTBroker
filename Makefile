@@ -15,8 +15,8 @@
 ###############################################################################
 
 # Image coordinates. Override REGISTRY at the command line for a private
-# registry; the default targets Docker Hub under the mapexos org.
-REGISTRY  ?= docker.io/mapexos
+# registry; the default targets the thiagoanselmo Docker Hub namespace.
+REGISTRY  ?= docker.io/thiagoanselmo
 IMAGE_NAME ?= mapex-broker-mqtt
 VERSION   ?= dev
 
@@ -35,6 +35,7 @@ IMAGE_LATEST := $(REGISTRY)/$(IMAGE_NAME):latest
 help:
 	@echo "Mapex MQTT Broker — image targets"
 	@echo ""
+	@echo "  make vendor          Regenerate the offline vendor tree (runs before every build)"
 	@echo "  make build           Build single-arch image $(IMAGE) for the host platform"
 	@echo "  make build-multiarch Build linux/amd64+arm64 via buildx (no push)"
 	@echo "  make test            Run Go-pure unit tests (no broker required)"
@@ -47,8 +48,15 @@ help:
 	@echo "Image: $(IMAGE)"
 	@echo "VCS:   $(VCS_REF)"
 
+# The image build is fully offline via -mod=vendor. Regenerate the vendor tree
+# from the sibling mapexGoKit checkout before every image build so a gokit
+# change is always picked up (the tree itself is gitignored).
+.PHONY: vendor
+vendor:
+	GOWORK=off go mod vendor
+
 .PHONY: build
-build:
+build: vendor
 	docker build \
 		--build-arg IMAGE_VERSION=$(VERSION) \
 		--build-arg VCS_REF=$(VCS_REF) \
@@ -58,7 +66,7 @@ build:
 		$(CONTEXT)
 
 .PHONY: build-multiarch
-build-multiarch:
+build-multiarch: vendor
 	docker buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg IMAGE_VERSION=$(VERSION) \
@@ -82,7 +90,7 @@ tag-latest:
 	docker push $(IMAGE_LATEST)
 
 .PHONY: release
-release:
+release: vendor
 	docker buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg IMAGE_VERSION=$(VERSION) \

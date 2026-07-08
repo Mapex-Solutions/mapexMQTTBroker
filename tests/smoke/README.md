@@ -25,7 +25,7 @@ docker compose down -v
 Override the broker image:
 
 ```bash
-BROKER_IMAGE=mapexos/mapex-broker-mqtt:0.1.0 ./run.sh
+BROKER_IMAGE=thiagoanselmo/mapex-broker-mqtt:0.1.0 ./run.sh
 ```
 
 ## Stack

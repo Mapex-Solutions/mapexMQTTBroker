@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./run.sh
-#   BROKER_IMAGE=mapexos/mapex-broker-mqtt:0.1.0 ./run.sh
+#   BROKER_IMAGE=thiagoanselmo/mapex-broker-mqtt:0.1.0 ./run.sh
 # =============================================================================
 set -euo pipefail
 
