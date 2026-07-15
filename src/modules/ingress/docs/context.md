@@ -20,7 +20,7 @@ subject-token safety invariants.
 ## Published Events (driven — outbound)
 | Event | Subject | Payload (ref) | Consumers |
 |-------|---------|----------------|-----------|
-| Device message | `{env}.mapexos.mqtt.data.{orgId}.{assetUUID}` | `application/dtos.IngressMessage` | js-executor |
+| Device message | `{env}.mapexos.mqtt.data` (static; identity in payload) | `application/dtos.IngressMessage` | js-executor |
 
 ## Consumed Events (driving — inbound)
 None — invoked directly by the cgo entry.

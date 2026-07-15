@@ -20,10 +20,11 @@ func New(pub ports.Publisher, prefix string, log logging.Logger) *Service {
 	return &Service{pub: pub, prefix: prefix, log: log}
 }
 
-// Publish emits an MQTT message envelope to a per-device ingress subject
-// ("{prefix}.{orgId}.{assetUUID}") so the js-executor's wildcard consumer
-// routes each device's messages without a fan-in step. Drops the message when
-// the subject tokens are NATS-illegal or the payload exceeds the size cap.
+// Publish emits an MQTT message envelope to the STATIC ingress subject
+// ({prefix}, e.g. dev.mapexos.mqtt.data). Identity (orgId, assetUUID) travels in
+// the IngressMessage payload, so the js-executor consumer reads it from the body,
+// never the subject. Drops the message when the tokens are NATS-illegal or the
+// payload exceeds the size cap.
 func (s *Service) Publish(orgID, assetUUID, clientID, topic string, payload []byte, qos int, retain bool, ts time.Time) bool {
 	if !s.subjectSafe(orgID, assetUUID, topic) {
 		return false
@@ -41,7 +42,7 @@ func (s *Service) Publish(orgID, assetUUID, clientID, topic string, payload []by
 		Retain:    retain,
 		Timestamp: ts,
 	}
-	subject := s.prefix + "." + orgID + "." + assetUUID
+	subject := s.prefix
 	return s.publish(subject, msg)
 }
 

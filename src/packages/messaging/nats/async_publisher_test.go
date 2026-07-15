@@ -428,7 +428,7 @@ func TestLogger_EmitsOnPublishError(t *testing.T) {
 	}
 	p.Start()
 	for i := 0; i < 3; i++ {
-		_ = p.Enqueue("dev.mapexos.mqtt.data.org-1.asset-aaa", []byte("x"))
+		_ = p.Enqueue("dev.mapexos.mqtt.data", []byte("x"))
 	}
 	_ = p.Drain(2 * time.Second)
 
